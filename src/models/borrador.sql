@@ -207,3 +207,21 @@ CREATE TABLE auditoria_log (
     fecha TIMESTAMP DEFAULT NOW(),
     detalles TEXT
 );
+
+
+-- 1. Crear tabla tecnico_ubicacion (PostgreSQL)
+
+-- Tu sistema ya tiene zonas, pero un técnico REAL puede moverse.
+
+-- Necesitas una tabla independiente para ENVIAR su ubicación cada cierto tiempo.
+
+-- Aquí está la tabla:
+
+CREATE TABLE tecnico_ubicacion (
+    id_ubicacion SERIAL PRIMARY KEY,
+    id_tecnico INT REFERENCES tecnico(id_tecnico) ON DELETE CASCADE,
+    lat DECIMAL(10,6) NOT NULL,
+    lon DECIMAL(10,6) NOT NULL,
+    direccion_texto TEXT,
+    fecha_actualizacion TIMESTAMP DEFAULT NOW()
+);
