@@ -1,7 +1,13 @@
-const { Notificacion } = require("../models");
+const { Notificacion, Usuario } = require("../models");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
 
+    /**
+     * ==========================================
+     * LISTAR NOTIFICACIONES DEL USUARIO
+     * ==========================================
+     */
     async listar(req, res) {
         try {
             const id_usuario = req.user.id_usuario;
@@ -19,6 +25,11 @@ module.exports = {
         }
     },
 
+    /**
+     * ==========================================
+     * MARCAR TODAS COMO LEÍDAS
+     * ==========================================
+     */
     async marcarLeidas(req, res) {
         try {
             const id_usuario = req.user.id_usuario;
@@ -32,6 +43,95 @@ module.exports = {
 
         } catch (error) {
             res.status(500).json({ msg: "Error marcando leídas" });
+        }
+    },
+
+    /**
+     * ==========================================
+     * ENVIAR NOTIFICACIÓN (ADMIN O SISTEMA)
+     * ==========================================
+     */
+    async enviar(req, res) {
+        try {
+            // Solo admin puede enviar notificaciones manualmente
+            if (req.user.rol !== "admin") {
+                return res.status(403).json({ msg: "Solo administradores pueden enviar notificaciones" });
+            }
+
+            const { id_usuario, titulo, cuerpo } = req.body;
+
+            if (!id_usuario || !titulo || !cuerpo) {
+                return res.status(400).json({ msg: "Faltan campos requeridos: id_usuario, titulo, cuerpo" });
+            }
+
+            // Verificar que el usuario existe
+            const usuario = await Usuario.findByPk(id_usuario);
+            if (!usuario) {
+                return res.status(404).json({ msg: "Usuario no encontrado" });
+            }
+
+            // Enviar notificación usando el util
+            const notificacion = await enviarNotificacion(id_usuario, titulo, cuerpo);
+
+            res.json({
+                msg: "Notificación enviada correctamente",
+                notificacion
+            });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error enviando notificación" });
+        }
+    },
+
+    /**
+     * ==========================================
+     * ELIMINAR UNA NOTIFICACIÓN
+     * ==========================================
+     */
+    async eliminar(req, res) {
+        try {
+            const { id_notificacion } = req.params;
+            const id_usuario = req.user.id_usuario;
+
+            const notificacion = await Notificacion.findByPk(id_notificacion);
+            if (!notificacion) {
+                return res.status(404).json({ msg: "Notificación no encontrada" });
+            }
+
+            // Solo puede eliminar sus propias notificaciones (o admin puede eliminar cualquiera)
+            if (notificacion.id_usuario !== id_usuario && req.user.rol !== "admin") {
+                return res.status(403).json({ msg: "No puedes eliminar esta notificación" });
+            }
+
+            await notificacion.destroy();
+
+            res.json({ msg: "Notificación eliminada" });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error eliminando notificación" });
+        }
+    },
+
+    /**
+     * ==========================================
+     * ELIMINAR TODAS LAS NOTIFICACIONES
+     * ==========================================
+     */
+    async eliminarTodas(req, res) {
+        try {
+            const id_usuario = req.user.id_usuario;
+
+            await Notificacion.destroy({
+                where: { id_usuario }
+            });
+
+            res.json({ msg: "Todas las notificaciones eliminadas" });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error eliminando notificaciones" });
         }
     }
 };

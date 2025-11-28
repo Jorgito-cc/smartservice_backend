@@ -15,6 +15,8 @@ class SolicitudServicio extends Model {
             ubicacion_texto: { type: DataTypes.TEXT },
             lat: { type: DataTypes.DECIMAL(10, 6) },
             lon: { type: DataTypes.DECIMAL(10, 6) },
+            precio_ofrecido: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+            fotos: { type: DataTypes.JSON, allowNull: true },
             estado: {
                 type: DataTypes.ENUM(
                     "pendiente",

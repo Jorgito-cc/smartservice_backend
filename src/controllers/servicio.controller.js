@@ -6,7 +6,7 @@ const {
     Notificacion
 } = require("../models");
 
-const admin = require("firebase-admin");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
 
@@ -46,24 +46,12 @@ module.exports = {
             // 5. Cambiar estado de solicitud
             await solicitud.update({ estado: "asignado" });
 
-            // 6. Notificar al técnico
-            const tecnico = await Usuario.findByPk(oferta.id_tecnico);
-
-            if (tecnico && tecnico.token_real) {
-                const payload = {
-                    notification: {
-                        title: "Has sido seleccionado",
-                        body: "Un cliente eligió tu oferta"
-                    }
-                };
-                await admin.messaging().sendToDevice(tecnico.token_real, payload);
-
-                await Notificacion.create({
-                    id_usuario: tecnico.id_usuario,
-                    titulo: "Oferta seleccionada",
-                    cuerpo: "Un cliente te asignó un servicio"
-                });
-            }
+            // 6. Notificar al técnico (usa el util que maneja push y BD)
+            await enviarNotificacion(
+                oferta.id_tecnico,
+                "Has sido seleccionado",
+                "Un cliente eligió tu oferta"
+            );
 
             res.json({
                 msg: "Servicio asignado correctamente",
@@ -99,24 +87,13 @@ module.exports = {
 
             await servicio.update({ estado });
 
-            // Notificar al cliente
+            // Notificar al cliente (usa el util que maneja push y BD)
             const solicitud = await SolicitudServicio.findByPk(servicio.id_solicitud);
-            const cliente = await Usuario.findByPk(solicitud.id_cliente);
-
-            if (cliente.token_real) {
-                await admin.messaging().sendToDevice(cliente.token_real, {
-                    notification: {
-                        title: "Actualización del servicio",
-                        body: `El técnico cambió el estado a: ${estado}`
-                    }
-                });
-
-                await Notificacion.create({
-                    id_usuario: cliente.id_usuario,
-                    titulo: "Estado del servicio actualizado",
-                    cuerpo: `Nuevo estado: ${estado}`
-                });
-            }
+            await enviarNotificacion(
+                solicitud.id_cliente,
+                "Actualización del servicio",
+                `El técnico cambió el estado a: ${estado}`
+            );
 
             res.json({
                 msg: "Estado actualizado correctamente",

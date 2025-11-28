@@ -99,10 +99,15 @@ module.exports = {
     },
     async listarTodas(req, res) {
         try {
+            // El middleware de roles ya valida que sea admin, pero por seguridad:
             if (req.user.rol !== "admin")
                 return res.status(403).json({ msg: "Sin permisos" });
 
             const lista = await Incidencia.findAll({
+                include: [{
+                    model: Usuario,
+                    attributes: ['id_usuario', 'nombre', 'apellido', 'email', 'rol']
+                }],
                 order: [["fecha_reporte", "DESC"]]
             });
 
@@ -115,6 +120,7 @@ module.exports = {
     },
     async cambiarEstado(req, res) {
         try {
+            // El middleware de roles ya valida que sea admin, pero por seguridad:
             if (req.user.rol !== "admin")
                 return res.status(403).json({ msg: "Sin permisos" });
 

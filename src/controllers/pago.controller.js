@@ -4,11 +4,10 @@ const {
     OfertaTecnico,
     PagoServicio,
     SolicitudServicio,
-    Usuario,
-    Notificacion
+    Usuario
 } = require("../models");
 
-const admin = require("firebase-admin");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
 
@@ -111,35 +110,62 @@ module.exports = {
                 });
             }
 
-            // Notificar al técnico y cliente
+            // Notificar al técnico y cliente (usa el util que maneja push y BD)
             const servicio = await ServicioAsignado.findByPk(id_servicio);
             const solicitud = await SolicitudServicio.findByPk(servicio.id_solicitud);
-            const tecnico = await Usuario.findByPk(servicio.id_tecnico);
-            const cliente = await Usuario.findByPk(solicitud.id_cliente);
 
-            // Técnico
-            if (tecnico.token_real) {
-                await admin.messaging().sendToDevice(tecnico.token_real, {
-                    notification: {
-                        title: "Pago recibido",
-                        body: "El cliente pagó tu servicio."
-                    }
-                });
-            }
+            // Notificar técnico
+            await enviarNotificacion(
+                servicio.id_tecnico,
+                "Pago recibido",
+                "El cliente pagó tu servicio."
+            );
 
-            // Cliente
-            if (cliente.token_real) {
-                await admin.messaging().sendToDevice(cliente.token_real, {
-                    notification: {
-                        title: "Pago completado",
-                        body: "Tu pago fue procesado exitosamente."
-                    }
-                });
-            }
+            // Notificar cliente
+            await enviarNotificacion(
+                solicitud.id_cliente,
+                "Pago completado",
+                "Tu pago fue procesado exitosamente."
+            );
 
             return res.json({ received: true });
         }
 
         res.json({ received: true });
+    },
+
+    // ==========================================
+    //        OBTENER PAGO DE UN SERVICIO
+    // ==========================================
+    async obtenerPorServicio(req, res) {
+        try {
+            const { id_servicio } = req.params;
+            const { id_usuario, rol } = req.user;
+
+            const servicio = await ServicioAsignado.findByPk(id_servicio);
+            if (!servicio)
+                return res.status(404).json({ msg: "Servicio no encontrado" });
+
+            const solicitud = await SolicitudServicio.findByPk(servicio.id_solicitud);
+
+            const esCliente = rol === "cliente" && solicitud.id_cliente === id_usuario;
+            const esTecnico = rol === "tecnico" && servicio.id_tecnico === id_usuario;
+            const esAdmin = rol === "admin";
+
+            if (!(esCliente || esTecnico || esAdmin)) {
+                return res.status(403).json({ msg: "No puedes ver este pago" });
+            }
+
+            const pago = await PagoServicio.findOne({ where: { id_servicio } });
+            if (!pago) {
+                return res.json({ estado: "sin_registro" });
+            }
+
+            res.json(pago);
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error obteniendo pago" });
+        }
     }
 };

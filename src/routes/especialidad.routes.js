@@ -6,9 +6,9 @@ const role = require("../middleware/role.middleware");
 const controller = require("../controllers/especialidad.controller");
 
 // SOLO ADMIN CREA / EDITA / ELIMINA
-router.post("/", auth, role(["admin"]), controller.crear);
-router.put("/:id", auth, role(["admin"]), controller.actualizar);
-router.delete("/:id", auth, role(["admin"]), controller.eliminar);
+router.post("/", auth, role("admin"), controller.crear);
+router.put("/:id", auth, role("admin"), controller.actualizar);
+router.delete("/:id", auth, role("admin"), controller.eliminar);
 
 // LISTA Y DETALLE PARA TODOS
 router.get("/", controller.listar);

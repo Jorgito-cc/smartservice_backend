@@ -1,5 +1,5 @@
 const { SolicitudServicio, OfertaTecnico, Usuario, Cliente, Notificacion } = require("../models");
-const admin = require("firebase-admin");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
 
@@ -34,25 +34,12 @@ module.exports = {
                 mensaje
             });
 
-            // 4. Notificar al cliente
-            const cliente = await Usuario.findByPk(solicitud.id_cliente);
-
-            if (cliente && cliente.token_real) {
-                const payload = {
-                    notification: {
-                        title: "Nueva oferta recibida",
-                        body: `Un técnico te ofertó Bs. ${precio}`
-                    }
-                };
-                await admin.messaging().sendToDevice(cliente.token_real, payload);
-
-                // Guardar historial
-                await Notificacion.create({
-                    id_usuario: cliente.id_usuario,
-                    titulo: "Nueva oferta",
-                    cuerpo: `Has recibido una oferta por Bs. ${precio}`
-                });
-            }
+            // 4. Notificar al cliente (usa el util que maneja push y BD)
+            await enviarNotificacion(
+                solicitud.id_cliente,
+                "Nueva oferta recibida",
+                `Un técnico te ofertó Bs. ${precio}`
+            );
 
             res.json({
                 msg: "Oferta creada correctamente",

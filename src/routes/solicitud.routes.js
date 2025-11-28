@@ -6,10 +6,10 @@ const role = require("../middleware/role.middleware");
 const controller = require("../controllers/solicitud.controller");
 
 // CLIENTE CREA SOLICITUD
-router.post("/", auth, role(["cliente"]), controller.crear);
+router.post("/", auth, role("cliente"), controller.crear);
 
 // CLIENTE VE SUS SOLICITUDES
-router.get("/", auth, role(["cliente"]), controller.listarPorCliente);
+router.get("/", auth, role("cliente"), controller.listarPorCliente);
 
 // DETALLE
 router.get("/:id", auth, controller.obtener);

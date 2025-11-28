@@ -1,4 +1,4 @@
-const admin = require("firebase-admin");
+const { admin } = require("./firebase");
 const { Notificacion, Usuario } = require("../models");
 let ioInstance = null; // socket global
 

@@ -6,6 +6,9 @@ const auth = require("../middleware/auth.middleware");
 // Cliente inicia pago
 router.post("/checkout", auth, controller.crearCheckout);
 
+// Obtener información del pago por servicio
+router.get("/servicio/:id_servicio", auth, controller.obtenerPorServicio);
+
 // Webhook (IMPORTANTE: sin auth)
 router.post("/webhook", express.raw({ type: "application/json" }), controller.webhook);
 

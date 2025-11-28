@@ -105,6 +105,24 @@ function setupAssociations() {
     });
 
 
+    
+
+// ========================================
+//         TÉCNICO – ESPECIALIDAD (N:M)
+// ========================================
+Tecnico.belongsToMany(Especialidad, {
+    through: TecnicoEspecialidad,
+    foreignKey: "id_tecnico"
+});
+
+Especialidad.belongsToMany(Tecnico, {
+    through: TecnicoEspecialidad,
+    foreignKey: "id_especialidad"
+});
+
+
+
+
     // ========================================
     //         SOLICITUD DE SERVICIO
     // ========================================
@@ -170,6 +188,9 @@ function setupAssociations() {
     // ========================================
     ServicioAsignado.hasMany(ChatMensaje, { foreignKey: "id_servicio" });
     ChatMensaje.belongsTo(ServicioAsignado, { foreignKey: "id_servicio" });
+
+    SolicitudServicio.hasMany(ChatMensaje, { foreignKey: "id_solicitud", as: "mensajesGrupales" });
+    ChatMensaje.belongsTo(SolicitudServicio, { foreignKey: "id_solicitud", as: "solicitud" });
 
     Usuario.hasMany(ChatMensaje, { foreignKey: "emisor_id" });
     ChatMensaje.belongsTo(Usuario, { foreignKey: "emisor_id" });

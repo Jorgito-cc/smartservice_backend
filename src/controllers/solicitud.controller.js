@@ -1,5 +1,6 @@
 const { SolicitudServicio, Cliente, Categoria, Usuario, Tecnico, TecnicoZona, Notificacion } = require("../models");
-const admin = require("firebase-admin"); // SDK de Firebase
+const { admin } = require("../utils/firebase");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
 
@@ -8,7 +9,7 @@ module.exports = {
     // ===========================
     async crear(req, res) {
         try {
-            const { id_categoria, descripcion, ubicacion_texto, lat, lon } = req.body;
+            const { id_categoria, descripcion, ubicacion_texto, lat, lon, precio_ofrecido, fotos } = req.body;
             const id_cliente = req.user.id_usuario; // VIENE DEL JWT
 
             // Crear la solicitud
@@ -18,7 +19,9 @@ module.exports = {
                 descripcion,
                 ubicacion_texto,
                 lat,
-                lon
+                lon,
+                precio_ofrecido: precio_ofrecido || null,
+                fotos: fotos ? (Array.isArray(fotos) ? fotos : JSON.parse(fotos)) : null
             });
 
             // ==============================================
@@ -27,34 +30,19 @@ module.exports = {
             // 1) Buscar técnicos de esa categoría
             const tecnicosCategoria = await Tecnico.findAll();
 
-            // 2) Filtrar por disponibilidad y token_real
-            const tokens = [];
+            // 2) Enviar notificaciones a técnicos disponibles
             for (const t of tecnicosCategoria) {
                 const usuario = await Usuario.findByPk(t.id_tecnico);
-                if (usuario.token_real && t.disponibilidad === true) {
-                    tokens.push(usuario.token_real);
+                if (usuario && t.disponibilidad === true) {
+                    // Enviar notificación usando el util (maneja push y BD)
+                    const precioTexto = precio_ofrecido ? `Bs. ${precio_ofrecido}` : "Negociable";
+                    await enviarNotificacion(
+                        usuario.id_usuario,
+                        "Nueva solicitud de servicio",
+                        `${descripcion} - Precio ofrecido: ${precioTexto}`
+                    );
                 }
             }
-
-            if (tokens.length > 0) {
-                const payload = {
-                    notification: {
-                        title: "Nueva solicitud de servicio",
-                        body: descripcion
-                    }
-                };
-
-                await admin.messaging().sendToDevice(tokens, payload);
-            }
-
-            // 3) Guardar historial de notificaciones
-            await Notificacion.bulkCreate(
-                tokens.map(token => ({
-                    id_usuario: token.id_usuario,
-                    titulo: "Nueva solicitud",
-                    cuerpo: descripcion
-                }))
-            );
 
             res.json({
                 msg: "Solicitud creada correctamente",

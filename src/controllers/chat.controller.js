@@ -1,4 +1,5 @@
-const { ChatMensaje, Usuario, ServicioAsignado, Notificacion } = require("../models");
+const { ChatMensaje, Usuario, ServicioAsignado, Notificacion, SolicitudServicio } = require("../models");
+const { Op } = require("sequelize");
 const sendPush = require("../utils/firebase");
 
 module.exports = {
@@ -9,6 +10,10 @@ module.exports = {
 
             const mensajes = await ChatMensaje.findAll({
                 where: { id_servicio },
+                include: [{
+                    model: Usuario,
+                    attributes: ['id_usuario', 'nombre', 'apellido', 'foto', 'rol']
+                }],
                 order: [["fecha", "ASC"]]
             });
 
@@ -17,6 +22,30 @@ module.exports = {
         } catch (error) {
             console.error(error);
             res.status(500).json({ msg: "Error obteniendo historial" });
+        }
+    },
+
+    async obtenerHistorialGrupal(req, res) {
+        try {
+            const { id_solicitud } = req.params;
+
+            const mensajes = await ChatMensaje.findAll({
+                where: { 
+                    id_solicitud,
+                    id_servicio: null // Solo mensajes del chat grupal
+                },
+                include: [{
+                    model: Usuario,
+                    attributes: ['id_usuario', 'nombre', 'apellido', 'foto', 'rol']
+                }],
+                order: [["fecha", "ASC"]]
+            });
+
+            res.json(mensajes);
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error obteniendo historial grupal" });
         }
     },
     async enviarMensaje(req, res) {

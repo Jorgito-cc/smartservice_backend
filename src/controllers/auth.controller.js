@@ -67,7 +67,7 @@ module.exports = {
     async register(req, res) {
         try {
             // Extraer datos del cuerpo de la petición
-            const { nombre, apellido, email, password, rol, telefono, preferencia, descripcion } = req.body;
+            const { nombre, apellido, email, password, rol, telefono, preferencia, descripcion , foto} = req.body;
 
             // ========================================
             // VALIDACIÓN 1: Verificar que el rol sea válido
@@ -120,6 +120,7 @@ module.exports = {
                 email,               // Email único
                 telefono: telefono || null,  // Teléfono (opcional, si no viene es null)
                 password: hashed,    // Contraseña hasheada (NUNCA se guarda en texto plano)
+                foto: foto || null, 
                 rol,                 // Rol: "cliente", "tecnico" o "admin"
                 // IMPORTANTE: Los técnicos se crean con estado=false
                 // Esto significa que no pueden hacer login hasta que un admin los valide
@@ -172,6 +173,7 @@ module.exports = {
                     apellido: usuario.apellido,
                     email: usuario.email,
                     rol: usuario.rol,
+                    foto: usuario.foto,
                     estado: usuario.estado  // false para técnicos, true para otros
                 }
             });
@@ -331,6 +333,49 @@ module.exports = {
             });
         }
     },
+// ======================================================
+//        ACTIVAR TÉCNICO
+// ======================================================
+async activarTecnico(req, res) {
+    try {
+        const { id } = req.params;
+
+        const usuario = await Usuario.findByPk(id);
+        if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
+        if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
+
+        usuario.estado = true;
+        await usuario.save();
+
+        return res.json({ msg: "Técnico activado correctamente" });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ msg: "Error activando técnico" });
+    }
+},
+
+// ======================================================
+//        DESACTIVAR TÉCNICO
+// ======================================================
+async desactivarTecnico(req, res) {
+    try {
+        const { id } = req.params;
+
+        const usuario = await Usuario.findByPk(id);
+        if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
+        if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
+
+        usuario.estado = false;
+        await usuario.save();
+
+        return res.json({ msg: "Técnico desactivado correctamente" });
+
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ msg: "Error desactivando técnico" });
+    }
+},
 
     /**
      * ==========================================
@@ -569,6 +614,80 @@ module.exports = {
                 msg: "Error en el servidor", 
                 error: err.message 
             });
+        }
+    },
+    /**
+ * ==========================================
+ * FUNCIÓN: getAllPerfiles
+ * ==========================================
+ * 
+ * Obtiene todos los usuarios del sistema con su información completa,
+ * incluyendo datos específicos según su rol:
+ *  - Cliente → preferencia
+ *  - Técnico → descripcion, calificacion_promedio, disponibilidad
+ *  - Admin → solo datos básicos
+ * 
+ * NO incluye contraseñas.
+ * Solo para administradores.
+ */
+    async getAllPerfiles(req, res) {
+        try {
+            const usuarios = await Usuario.findAll({
+                attributes: { exclude: ["password"] },
+    
+                include: [
+                    {
+                        model: Cliente,
+                        attributes: ["preferencia"]
+                    },
+                    {
+                        model: Tecnico,
+                        attributes: ["descripcion", "calificacion_promedio", "disponibilidad"]
+                    },
+                    {
+                        model: Admin,
+                        attributes: ["id_admin"]
+                    }
+                ]
+            });
+    
+            return res.json({
+                total: usuarios.length,
+                usuarios
+            });
+    
+        } catch (err) {
+            console.error("Error obteniendo perfiles:", err);
+            return res.status(500).json({
+                msg: "Error obteniendo perfiles",
+                error: err.message
+            });
+        }
+    },
+
+    /**
+     * Actualiza el token FCM (token_real) del usuario autenticado
+     */
+    async actualizarTokenReal(req, res) {
+        try {
+            const { token_real } = req.body;
+            const id_usuario = req.user.id_usuario;
+
+            if (!token_real) {
+                return res.status(400).json({ msg: "token_real es requerido" });
+            }
+
+            const usuario = await Usuario.findByPk(id_usuario);
+            if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
+
+            usuario.token_real = token_real;
+            await usuario.save();
+
+            return res.json({ msg: "Token de notificaciones actualizado" });
+
+        } catch (error) {
+            console.error("Error actualizando token_real:", error);
+            return res.status(500).json({ msg: "Error guardando token" });
         }
     }
 };

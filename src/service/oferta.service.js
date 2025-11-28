@@ -1,5 +1,5 @@
 const { oferta_tecnico, solicitud_servicio, servicio_asignado } = require("../models");
-const NotificationService = require("./notification.service");
+const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = {
     // Crear una oferta del técnico
@@ -17,7 +17,7 @@ module.exports = {
         const oferta = await oferta_tecnico.create(data);
 
         // Notificar al cliente
-        await NotificationService.enviarNotificacion(
+        await enviarNotificacion(
             solicitud.id_cliente,
             "Nueva oferta recibida",
             "Un técnico ofertó por tu solicitud."
@@ -67,7 +67,7 @@ module.exports = {
         });
 
         // Notificar técnico ganador
-        await NotificationService.enviarNotificacion(
+        await enviarNotificacion(
             oferta.id_tecnico,
             "Oferta ganadora",
             "Un cliente te ha seleccionado para un servicio."

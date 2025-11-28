@@ -31,6 +31,6 @@ const PORT = process.env.PORT || 3000;
 
 // Levantar servidor http + socket
 httpServer.listen(PORT, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`🚀 Servidor corriendo en http://0.0.0.0:${PORT}`);
     console.log("🔥 Socket.IO listo para usarse");
 });
