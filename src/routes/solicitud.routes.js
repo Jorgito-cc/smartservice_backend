@@ -11,6 +11,9 @@ router.post("/", auth, role("cliente"), controller.crear);
 // CLIENTE VE SUS SOLICITUDES
 router.get("/", auth, role("cliente"), controller.listarPorCliente);
 
+// TÉCNICOS VEN SOLICITUDES DISPONIBLES
+router.get("/disponibles", auth, role("tecnico"), controller.listarDisponibles);
+
 // DETALLE
 router.get("/:id", auth, controller.obtener);
 

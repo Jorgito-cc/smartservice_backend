@@ -5,6 +5,7 @@ const {
     Usuario,
     Notificacion
 } = require("../models");
+const { Op } = require("sequelize");
 
 const { enviarNotificacion } = require("../utils/notificacion.util");
 
@@ -51,6 +52,17 @@ module.exports = {
                 oferta.id_tecnico,
                 "Has sido seleccionado",
                 "Un cliente eligió tu oferta"
+            );
+
+            // 7. Rechazar otras ofertas de la misma solicitud
+            await OfertaTecnico.update(
+                { estado: "rechazada" },
+                {
+                    where: {
+                        id_solicitud: solicitud.id_solicitud,
+                        id_oferta: { [Op.ne]: oferta.id_oferta }
+                    }
+                }
             );
 
             res.json({

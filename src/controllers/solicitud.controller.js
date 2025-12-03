@@ -1,4 +1,5 @@
 const { SolicitudServicio, Cliente, Categoria, Usuario, Tecnico, TecnicoZona, Notificacion } = require("../models");
+const { Op } = require("sequelize");
 const { admin } = require("../utils/firebase");
 const { enviarNotificacion } = require("../utils/notificacion.util");
 
@@ -27,19 +28,31 @@ module.exports = {
             // ==============================================
             //   ENVIAR NOTIFICACIÓN A TÉCNICOS DISPONIBLES
             // ==============================================
-            // 1) Buscar técnicos de esa categoría
-            const tecnicosCategoria = await Tecnico.findAll();
+            // 1) Buscar técnicos disponibles
+            // Nota: Por ahora notificamos a todos los técnicos disponibles
+            // En el futuro se puede filtrar por categoría si hay relación con especialidades
+            
+            // Buscar técnicos disponibles
+            const tecnicosDisponibles = await Tecnico.findAll({
+                where: { disponibilidad: true },
+                include: [{
+                    model: Usuario,
+                    where: { rol: 'tecnico', estado: true },
+                    attributes: ['id_usuario', 'nombre', 'apellido', 'token_real']
+                }]
+            });
 
             // 2) Enviar notificaciones a técnicos disponibles
-            for (const t of tecnicosCategoria) {
-                const usuario = await Usuario.findByPk(t.id_tecnico);
-                if (usuario && t.disponibilidad === true) {
-                    // Enviar notificación usando el util (maneja push y BD)
-                    const precioTexto = precio_ofrecido ? `Bs. ${precio_ofrecido}` : "Negociable";
+            const precioTexto = precio_ofrecido ? `Bs. ${precio_ofrecido}` : "Negociable";
+            const descripcionCorta = descripcion.length > 100 ? `${descripcion.substring(0, 100)}...` : descripcion;
+            
+            for (const t of tecnicosDisponibles) {
+                const usuario = t.Usuario;
+                if (usuario) {
                     await enviarNotificacion(
                         usuario.id_usuario,
                         "Nueva solicitud de servicio",
-                        `${descripcion} - Precio ofrecido: ${precioTexto}`
+                        `${descripcionCorta} - Precio: ${precioTexto}`
                     );
                 }
             }
@@ -109,6 +122,38 @@ module.exports = {
             await solicitud.update({ estado });
 
             res.json({ msg: "Estado actualizado", solicitud });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error interno del servidor" });
+        }
+    },
+
+    // ===========================
+    //     LISTAR DISPONIBLES PARA TÉCNICOS
+    // ===========================
+    async listarDisponibles(req, res) {
+        try {
+            const id_tecnico = req.user.id_usuario;
+
+            // Obtener todas las solicitudes que no están asignadas o completadas
+            const solicitudes = await SolicitudServicio.findAll({
+                where: {
+                    estado: {
+                        [Op.in]: ["pendiente", "con_ofertas"]
+                    }
+                },
+                include: [{
+                    model: Categoria,
+                    attributes: ['id_categoria', 'nombre', 'descripcion']
+                }],
+                order: [["fecha_publicacion", "DESC"]]
+            });
+
+            res.json({
+                msg: "Solicitudes disponibles",
+                data: solicitudes
+            });
 
         } catch (error) {
             console.error(error);
