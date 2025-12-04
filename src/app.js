@@ -31,6 +31,10 @@ const auditoria = require("./middleware/auditoria.middleware");
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Servir archivos estáticos del frontend web
+const path = require("path");
+app.use(express.static(path.join(__dirname, "../public")));
 /* 
 app.use(require("./middleware/auth.middleware"));
 app.use(auditoria); */

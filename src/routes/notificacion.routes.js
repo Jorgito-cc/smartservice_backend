@@ -23,6 +23,9 @@ router.get("/", controller.listar);
 // Marcar todas como leídas
 router.put("/leidas", controller.marcarLeidas);
 
+// Marcar una como leída
+router.put("/:id_notificacion/leida", controller.marcarLeida);
+
 // Enviar notificación (solo admin)
 router.post("/", role("admin"), controller.enviar);
 

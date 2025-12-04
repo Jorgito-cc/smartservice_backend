@@ -20,6 +20,9 @@ const {
     Cliente,    // Tabla de clientes (relación 1:1 con Usuario)
     Tecnico,    // Tabla de técnicos (relación 1:1 con Usuario)
     Admin       // Tabla de administradores (relación 1:1 con Usuario)
+    ,
+    Especialidad,
+    TecnicoEspecialidad
 } = require("../models/index");
 
 module.exports = {
@@ -67,15 +70,15 @@ module.exports = {
     async register(req, res) {
         try {
             // Extraer datos del cuerpo de la petición
-            const { nombre, apellido, email, password, rol, telefono, preferencia, descripcion , foto} = req.body;
+            const { nombre, apellido, email, password, rol, telefono, preferencia, descripcion, foto, ci, foto_ci, calificacion_promedio, especialidades } = req.body;
 
             // ========================================
             // VALIDACIÓN 1: Verificar que el rol sea válido
             // ========================================
             // Solo acepta estos tres roles, cualquier otro es inválido
             if (!["cliente", "tecnico", "admin"].includes(rol)) {
-                return res.status(400).json({ 
-                    msg: "Rol inválido. Debe ser: cliente, tecnico o admin" 
+                return res.status(400).json({
+                    msg: "Rol inválido. Debe ser: cliente, tecnico o admin"
                 });
             }
 
@@ -85,8 +88,8 @@ module.exports = {
             // Busca en la base de datos si ya existe un usuario con ese email
             const existe = await Usuario.findOne({ where: { email } });
             if (existe) {
-                return res.status(400).json({ 
-                    msg: "Email ya registrado" 
+                return res.status(400).json({
+                    msg: "Email ya registrado"
                 });
             }
 
@@ -95,8 +98,8 @@ module.exports = {
             // ========================================
             // Los campos nombre, apellido, email y password son obligatorios
             if (!nombre || !apellido || !email || !password) {
-                return res.status(400).json({ 
-                    msg: "Faltan campos requeridos" 
+                return res.status(400).json({
+                    msg: "Faltan campos requeridos"
                 });
             }
 
@@ -120,7 +123,9 @@ module.exports = {
                 email,               // Email único
                 telefono: telefono || null,  // Teléfono (opcional, si no viene es null)
                 password: hashed,    // Contraseña hasheada (NUNCA se guarda en texto plano)
-                foto: foto || null, 
+                foto: foto || null,
+                ci: ci || null,
+                foto_ci: foto_ci || null,
                 rol,                 // Rol: "cliente", "tecnico" o "admin"
                 // IMPORTANTE: Los técnicos se crean con estado=false
                 // Esto significa que no pueden hacer login hasta que un admin los valide
@@ -135,7 +140,7 @@ module.exports = {
 
             // Si es CLIENTE
             if (rol === "cliente") {
-                await Cliente.create({ 
+                await Cliente.create({
                     id_cliente: usuario.id_usuario,  // El id_cliente es igual al id_usuario
                     preferencia: preferencia || null  // Preferencias del cliente (opcional)
                 });
@@ -143,16 +148,42 @@ module.exports = {
 
             // Si es TÉCNICO
             if (rol === "tecnico") {
-                await Tecnico.create({ 
+                await Tecnico.create({
                     id_tecnico: usuario.id_usuario,   // El id_tecnico es igual al id_usuario
                     descripcion: descripcion || null, // Descripción del técnico (opcional)
-                    disponibilidad: false              // Inicialmente no disponible
-                });
-            }
+                    disponibilidad: false,
+                    calificacion_promedio: calificacion_promedio || 0              // Inicialmente no disponible
 
+                });
+
+                // ================================
+                //   REGISTRAR ESPECIALIDADES
+                // ================================
+                if (req.body.especialidades && Array.isArray(req.body.especialidades)) {
+
+                    for (const esp of req.body.especialidades) {
+
+                        // 1) Crear o buscar la especialidad
+                        const [especialidad] = await Especialidad.findOrCreate({
+                            where: { nombre: esp.nombre },
+                            defaults: {
+                                referencias: esp.referencias || null,
+                                anio_experiencia: esp.anio_experiencia || null
+                            }
+                        });
+
+                        // 2) Crear la relación N:M en técnico_especialidad
+                        await TecnicoEspecialidad.create({
+                            id_tecnico: usuario.id_usuario,
+                            id_especialidad: especialidad.id_especialidad
+                        });
+                    }
+                }
+
+            }
             // Si es ADMIN
             if (rol === "admin") {
-                await Admin.create({ 
+                await Admin.create({
                     id_admin: usuario.id_usuario      // El id_admin es igual al id_usuario
                 });
             }
@@ -161,10 +192,10 @@ module.exports = {
             // RESPUESTA EXITOSA
             // ========================================
             // Retorna un mensaje y los datos del usuario creado (sin la contraseña)
-            return res.status(201).json({ 
+            return res.status(201).json({
                 // Mensaje diferente para técnicos (indica que necesitan validación)
-                msg: rol === "tecnico" 
-                    ? "Técnico registrado, esperando validación del administrador" 
+                msg: rol === "tecnico"
+                    ? "Técnico registrado, esperando validación del administrador"
                     : "Usuario registrado correctamente",
                 // Datos del usuario creado (sin password por seguridad)
                 usuario: {
@@ -174,7 +205,9 @@ module.exports = {
                     email: usuario.email,
                     rol: usuario.rol,
                     foto: usuario.foto,
-                    estado: usuario.estado  // false para técnicos, true para otros
+                    estado: usuario.estado, // false para técnicos, true para otros
+                    ci: usuario.ci,
+                    foto_ci: usuario.foto_ci
                 }
             });
 
@@ -184,9 +217,9 @@ module.exports = {
             // ========================================
             // Si ocurre cualquier error, lo registra en consola y retorna error 500
             console.error("Error en register:", err);
-            return res.status(500).json({ 
-                msg: "Error en el servidor", 
-                error: err.message 
+            return res.status(500).json({
+                msg: "Error en el servidor",
+                error: err.message
             });
         }
     },
@@ -240,8 +273,8 @@ module.exports = {
             // VALIDACIÓN 1: Verificar que los campos estén presentes
             // ========================================
             if (!email || !password) {
-                return res.status(400).json({ 
-                    msg: "Email y contraseña son requeridos" 
+                return res.status(400).json({
+                    msg: "Email y contraseña son requeridos"
                 });
             }
 
@@ -251,8 +284,8 @@ module.exports = {
             // Busca un usuario que tenga el email proporcionado
             const usuario = await Usuario.findOne({ where: { email } });
             if (!usuario) {
-                return res.status(404).json({ 
-                    msg: "Usuario no encontrado" 
+                return res.status(404).json({
+                    msg: "Usuario no encontrado"
                 });
             }
 
@@ -263,8 +296,8 @@ module.exports = {
             // bcrypt.compare() hashea la contraseña ingresada y la compara con la guardada
             const valid = await bcrypt.compare(password, usuario.password);
             if (!valid) {
-                return res.status(400).json({ 
-                    msg: "Contraseña incorrecta" 
+                return res.status(400).json({
+                    msg: "Contraseña incorrecta"
                 });
             }
 
@@ -274,8 +307,8 @@ module.exports = {
             // Los usuarios con estado=false no pueden hacer login
             // Esto incluye técnicos que aún no han sido validados por un admin
             if (usuario.estado === false) {
-                return res.status(403).json({ 
-                    msg: "Usuario deshabilitado. Contacte al administrador" 
+                return res.status(403).json({
+                    msg: "Usuario deshabilitado. Contacte al administrador"
                 });
             }
 
@@ -291,7 +324,7 @@ module.exports = {
             // Genera el token de acceso (válido por 7 días según JWT_EXPIRES)
             // Este token se usa para autenticar peticiones al API
             const token = generateToken(tokenData);
-            
+
             // Genera el refresh token (válido por 30 días)
             // Este token se usa para renovar el token de acceso cuando expire
             const refreshToken = generateRefreshToken(tokenData);
@@ -308,7 +341,9 @@ module.exports = {
                 telefono: usuario.telefono,
                 rol: usuario.rol,
                 estado: usuario.estado,
-                foto: usuario.foto
+                foto: usuario.foto,
+                ci: usuario.ci,
+                foto_ci: usuario.foto_ci
             };
 
             // ========================================
@@ -327,55 +362,55 @@ module.exports = {
             // MANEJO DE ERRORES
             // ========================================
             console.error("Error en login:", err);
-            return res.status(500).json({ 
-                msg: "Error en el servidor", 
-                error: err.message 
+            return res.status(500).json({
+                msg: "Error en el servidor",
+                error: err.message
             });
         }
     },
-// ======================================================
-//        ACTIVAR TÉCNICO
-// ======================================================
-async activarTecnico(req, res) {
-    try {
-        const { id } = req.params;
+    // ======================================================
+    //        ACTIVAR TÉCNICO
+    // ======================================================
+    async activarTecnico(req, res) {
+        try {
+            const { id } = req.params;
 
-        const usuario = await Usuario.findByPk(id);
-        if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
-        if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
+            const usuario = await Usuario.findByPk(id);
+            if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
+            if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
 
-        usuario.estado = true;
-        await usuario.save();
+            usuario.estado = true;
+            await usuario.save();
 
-        return res.json({ msg: "Técnico activado correctamente" });
+            return res.json({ msg: "Técnico activado correctamente" });
 
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ msg: "Error activando técnico" });
-    }
-},
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ msg: "Error activando técnico" });
+        }
+    },
 
-// ======================================================
-//        DESACTIVAR TÉCNICO
-// ======================================================
-async desactivarTecnico(req, res) {
-    try {
-        const { id } = req.params;
+    // ======================================================
+    //        DESACTIVAR TÉCNICO
+    // ======================================================
+    async desactivarTecnico(req, res) {
+        try {
+            const { id } = req.params;
 
-        const usuario = await Usuario.findByPk(id);
-        if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
-        if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
+            const usuario = await Usuario.findByPk(id);
+            if (!usuario) return res.status(404).json({ msg: "Usuario no encontrado" });
+            if (usuario.rol !== "tecnico") return res.status(400).json({ msg: "El usuario no es técnico" });
 
-        usuario.estado = false;
-        await usuario.save();
+            usuario.estado = false;
+            await usuario.save();
 
-        return res.json({ msg: "Técnico desactivado correctamente" });
+            return res.json({ msg: "Técnico desactivado correctamente" });
 
-    } catch (err) {
-        console.error(err);
-        return res.status(500).json({ msg: "Error desactivando técnico" });
-    }
-},
+        } catch (err) {
+            console.error(err);
+            return res.status(500).json({ msg: "Error desactivando técnico" });
+        }
+    },
 
     /**
      * ==========================================
@@ -423,8 +458,8 @@ async desactivarTecnico(req, res) {
             // VALIDACIÓN 1: Verificar que el refresh token esté presente
             // ========================================
             if (!refreshToken) {
-                return res.status(400).json({ 
-                    msg: "Refresh token es requerido" 
+                return res.status(400).json({
+                    msg: "Refresh token es requerido"
                 });
             }
 
@@ -436,8 +471,8 @@ async desactivarTecnico(req, res) {
             // Si es inválido o expirado, retorna null
             const decoded = verifyToken(refreshToken);
             if (!decoded) {
-                return res.status(401).json({ 
-                    msg: "Refresh token inválido o expirado" 
+                return res.status(401).json({
+                    msg: "Refresh token inválido o expirado"
                 });
             }
 
@@ -447,8 +482,8 @@ async desactivarTecnico(req, res) {
             // Busca el usuario en la base de datos usando el ID del token
             const usuario = await Usuario.findByPk(decoded.id_usuario);
             if (!usuario) {
-                return res.status(401).json({ 
-                    msg: "Usuario no encontrado" 
+                return res.status(401).json({
+                    msg: "Usuario no encontrado"
                 });
             }
 
@@ -457,8 +492,8 @@ async desactivarTecnico(req, res) {
             // ========================================
             // Aunque el token sea válido, si el usuario fue deshabilitado, no se renuevan los tokens
             if (usuario.estado === false) {
-                return res.status(403).json({ 
-                    msg: "Usuario deshabilitado" 
+                return res.status(403).json({
+                    msg: "Usuario deshabilitado"
                 });
             }
 
@@ -473,7 +508,7 @@ async desactivarTecnico(req, res) {
 
             // Genera un nuevo token de acceso (válido por 7 días)
             const newToken = generateToken(tokenData);
-            
+
             // Genera un nuevo refresh token (válido por 30 días)
             const newRefreshToken = generateRefreshToken(tokenData);
 
@@ -493,9 +528,9 @@ async desactivarTecnico(req, res) {
             // MANEJO DE ERRORES
             // ========================================
             console.error("Error en refreshToken:", err);
-            return res.status(500).json({ 
-                msg: "Error en el servidor", 
-                error: err.message 
+            return res.status(500).json({
+                msg: "Error en el servidor",
+                error: err.message
             });
         }
     },
@@ -556,8 +591,8 @@ async desactivarTecnico(req, res) {
 
             // Verificar que el usuario existe (aunque debería existir si pasó el middleware)
             if (!usuario) {
-                return res.status(404).json({ 
-                    msg: "Usuario no encontrado" 
+                return res.status(404).json({
+                    msg: "Usuario no encontrado"
                 });
             }
 
@@ -573,8 +608,8 @@ async desactivarTecnico(req, res) {
                 // El id_cliente es igual al id_usuario (relación 1:1)
                 const cliente = await Cliente.findByPk(usuario.id_usuario);
                 // Si existe, agrega las preferencias
-                datosAdicionales = cliente ? { 
-                    preferencia: cliente.preferencia 
+                datosAdicionales = cliente ? {
+                    preferencia: cliente.preferencia
                 } : {};
             }
 
@@ -610,9 +645,9 @@ async desactivarTecnico(req, res) {
             // MANEJO DE ERRORES
             // ========================================
             console.error("Error en getPerfil:", err);
-            return res.status(500).json({ 
-                msg: "Error en el servidor", 
-                error: err.message 
+            return res.status(500).json({
+                msg: "Error en el servidor",
+                error: err.message
             });
         }
     },
@@ -634,7 +669,7 @@ async desactivarTecnico(req, res) {
         try {
             const usuarios = await Usuario.findAll({
                 attributes: { exclude: ["password"] },
-    
+
                 include: [
                     {
                         model: Cliente,
@@ -647,15 +682,15 @@ async desactivarTecnico(req, res) {
                     {
                         model: Admin,
                         attributes: ["id_admin"]
-                    }
+                    },
                 ]
             });
-    
+
             return res.json({
                 total: usuarios.length,
                 usuarios
             });
-    
+
         } catch (err) {
             console.error("Error obteniendo perfiles:", err);
             return res.status(500).json({

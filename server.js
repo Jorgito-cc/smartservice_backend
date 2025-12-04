@@ -27,7 +27,7 @@ const { setSocket } = require("./src/utils/notificacion.util");
 setSocket(io);
 
 // Puerto
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 4000;
 
 // Levantar servidor http + socket
 httpServer.listen(PORT, () => {

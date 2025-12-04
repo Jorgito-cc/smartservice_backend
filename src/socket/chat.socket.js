@@ -1,12 +1,57 @@
 const { ChatMensaje, Usuario, Notificacion, SolicitudServicio, ServicioAsignado, OfertaTecnico } = require("../models");
 const { Op } = require("sequelize");
-const sendPush = require("../utils/firebase");
+const { verifyToken } = require("../utils/generateJWT");
 const { enviarNotificacion } = require("../utils/notificacion.util");
 
 module.exports = (io) => {
 
+    // Middleware de autenticación para Socket.IO
+    io.use((socket, next) => {
+        const token = socket.handshake.auth?.token;
+        if (!token) {
+            // Permitir conexión pero requerir autenticación después
+            return next();
+        }
+
+        try {
+            const decoded = verifyToken(token);
+            if (decoded) {
+                socket.userId = decoded.id_usuario;
+                socket.userRol = decoded.rol;
+            }
+        } catch (err) {
+            // Token inválido, pero permitir conexión
+            console.log("⚠️ Token inválido en socket:", err.message);
+        }
+        next();
+    });
+
     io.on("connection", (socket) => {
         console.log("🔵 Usuario conectado:", socket.id);
+
+        // Autenticar usuario si envía id_usuario
+        socket.on("authUser", async ({ id_usuario }) => {
+            try {
+                const usuario = await Usuario.findByPk(id_usuario);
+                if (usuario && usuario.estado === true) {
+                    socket.userId = id_usuario;
+                    socket.userRol = usuario.rol;
+                    socket.join(`user_${id_usuario}`);
+
+                    // Si es técnico, unir a sala de técnicos para recibir nuevas solicitudes
+                    if (usuario.rol === 'tecnico') {
+                        socket.join('technicians');
+                        console.log(`🟢 Técnico ${id_usuario} unido a sala 'technicians'`);
+                    }
+
+                    console.log(`🟢 Usuario ${id_usuario} autenticado y unido a user_${id_usuario}`);
+                } else {
+                    console.log(`⚠️ Usuario ${id_usuario} no encontrado o deshabilitado`);
+                }
+            } catch (err) {
+                console.error("Error autenticando usuario en socket:", err);
+            }
+        });
 
         // ==========================================
         // UNIRSE A CHAT GRUPAL (ANTES DE ASIGNAR)
@@ -30,6 +75,11 @@ module.exports = (io) => {
         socket.on("enviarMensajeGrupal", async (data) => {
             try {
                 const { id_solicitud, emisor_id, mensaje, precio } = data;
+
+                // Validar que el emisor_id coincida con el usuario autenticado
+                if (socket.userId && socket.userId !== emisor_id) {
+                    return socket.emit("error", { msg: "No autorizado" });
+                }
 
                 // Verificar que la solicitud existe y no está asignada
                 const solicitud = await SolicitudServicio.findByPk(id_solicitud);
@@ -111,6 +161,11 @@ module.exports = (io) => {
             try {
                 const { id_servicio, emisor_id, mensaje } = data;
 
+                // Validar que el emisor_id coincida con el usuario autenticado
+                if (socket.userId && socket.userId !== emisor_id) {
+                    return socket.emit("error", { msg: "No autorizado" });
+                }
+
                 // Guardar en BD
                 const nuevoMensaje = await ChatMensaje.create({
                     id_servicio, // Chat 1 a 1
@@ -134,10 +189,10 @@ module.exports = (io) => {
                 const servicio = await ServicioAsignado.findByPk(id_servicio);
                 if (servicio) {
                     const solicitud = await SolicitudServicio.findByPk(servicio.id_solicitud);
-                    
+
                     // Determinar receptor
-                    const receptor_id = servicio.id_tecnico === emisor_id 
-                        ? solicitud.id_cliente 
+                    const receptor_id = servicio.id_tecnico === emisor_id
+                        ? solicitud.id_cliente
                         : servicio.id_tecnico;
 
                     const receptor = await Usuario.findByPk(receptor_id);
@@ -160,7 +215,11 @@ module.exports = (io) => {
         socket.on("seleccionarOferta", async (data) => {
             try {
                 const { id_solicitud, id_mensaje_oferta } = data;
-                const id_cliente = socket.user?.id_usuario || data.id_cliente; // Necesitas autenticar el socket
+                const id_cliente = socket.userId || data.id_cliente;
+
+                if (!id_cliente) {
+                    return socket.emit("error", { msg: "No autenticado" });
+                }
 
                 // Obtener el mensaje que contiene la oferta
                 const mensajeOferta = await ChatMensaje.findByPk(id_mensaje_oferta, {

@@ -48,6 +48,36 @@ module.exports = {
 
     /**
      * ==========================================
+     * MARCAR UNA NOTIFICACIÓN COMO LEÍDA
+     * ==========================================
+     */
+    async marcarLeida(req, res) {
+        try {
+            const { id_notificacion } = req.params;
+            const id_usuario = req.user.id_usuario;
+
+            const notificacion = await Notificacion.findByPk(id_notificacion);
+            if (!notificacion) {
+                return res.status(404).json({ msg: "Notificación no encontrada" });
+            }
+
+            // Solo puede marcar sus propias notificaciones
+            if (notificacion.id_usuario !== id_usuario) {
+                return res.status(403).json({ msg: "No puedes marcar esta notificación" });
+            }
+
+            await notificacion.update({ leido: true });
+
+            res.json({ msg: "Notificación marcada como leída" });
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error marcando notificación" });
+        }
+    },
+
+    /**
+     * ==========================================
      * ENVIAR NOTIFICACIÓN (ADMIN O SISTEMA)
      * ==========================================
      */

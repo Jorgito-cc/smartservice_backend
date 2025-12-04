@@ -8,6 +8,9 @@ const controller = require("../controllers/servicio.controller");
 // Cliente selecciona oferta → crea servicio
 router.post("/asignar", auth, role("cliente"), controller.asignar);
 
+// Técnico lista sus servicios
+router.get("/tecnico/mis-servicios", auth, role("tecnico"), controller.listarPorTecnico);
+
 // Técnico actualiza estado del servicio
 router.put("/:id_servicio/estado", auth, role("tecnico"), controller.cambiarEstado);
 

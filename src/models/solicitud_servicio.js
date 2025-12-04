@@ -26,7 +26,8 @@ class SolicitudServicio extends Model {
                     "completado",
                     "cancelado"
                 ),
-                allowNull: false
+                allowNull: false,
+                defaultValue: "pendiente"
             }
         }, {
             sequelize,

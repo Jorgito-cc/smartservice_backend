@@ -41,6 +41,18 @@ module.exports = {
                 `Un técnico te ofertó Bs. ${precio}`
             );
 
+            // 5. Emitir evento en tiempo real al chat grupal de la solicitud
+            const { emitirEvento } = require("../utils/notificacion.util");
+            // Incluir datos del técnico para mostrar en el frontend
+            const tecnico = await Usuario.findByPk(id_tecnico, {
+                attributes: ['id_usuario', 'nombre', 'apellido', 'foto', 'rol']
+            });
+
+            emitirEvento(`solicitud_${id_solicitud}`, "new_offer", {
+                ...oferta.toJSON(),
+                tecnico: tecnico.toJSON()
+            });
+
             res.json({
                 msg: "Oferta creada correctamente",
                 oferta

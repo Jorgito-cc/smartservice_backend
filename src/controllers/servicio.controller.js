@@ -3,6 +3,7 @@ const {
     SolicitudServicio,
     OfertaTecnico,
     Usuario,
+    Cliente,
     Notificacion
 } = require("../models");
 const { Op } = require("sequelize");
@@ -125,7 +126,18 @@ module.exports = {
         try {
             const { id_servicio } = req.params;
 
-            const servicio = await ServicioAsignado.findByPk(id_servicio);
+            const servicio = await ServicioAsignado.findByPk(id_servicio, {
+                include: [{
+                    model: SolicitudServicio,
+                    include: [{
+                        model: Cliente,
+                        include: [{
+                            model: Usuario,
+                            attributes: ['id_usuario', 'nombre', 'apellido', 'telefono', 'foto']
+                        }]
+                    }]
+                }]
+            });
             if (!servicio) return res.status(404).json({ msg: "No encontrado" });
 
             res.json(servicio);
@@ -133,6 +145,39 @@ module.exports = {
         } catch (err) {
             console.error(err);
             res.status(500).json({ msg: "Error interno" });
+        }
+    },
+
+    // ==========================================
+    //       LISTAR SERVICIOS POR TÉCNICO
+    // ==========================================
+    async listarPorTecnico(req, res) {
+        try {
+            const id_tecnico = req.user.id_usuario;
+
+            const servicios = await ServicioAsignado.findAll({
+                where: { id_tecnico },
+                include: [{
+                    model: SolicitudServicio,
+                    include: [{
+                        model: Cliente,
+                        include: [{
+                            model: Usuario,
+                            attributes: ['id_usuario', 'nombre', 'apellido', 'telefono', 'foto']
+                        }]
+                    }]
+                }],
+                order: [["fecha_asignacion", "DESC"]]
+            });
+
+            res.json({
+                msg: "Servicios del técnico",
+                data: servicios
+            });
+
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ msg: "Error interno del servidor" });
         }
     }
 };
