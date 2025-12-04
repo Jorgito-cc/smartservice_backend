@@ -5,19 +5,22 @@ const auth = require("../middleware/auth.middleware");
 const role = require("../middleware/role.middleware");
 const controller = require("../controllers/solicitud.controller");
 
+// ADMIN: LISTAR TODAS LAS SOLICITUDES (debe ir primero para evitar conflictos con /:id)
+router.get("/admin/listar", role("admin"), controller.listarTodas);
+
 // CLIENTE CREA SOLICITUD
-router.post("/", auth, role("cliente"), controller.crear);
+router.post("/", role("cliente"), controller.crear);
 
 // CLIENTE VE SUS SOLICITUDES
-router.get("/", auth, role("cliente"), controller.listarPorCliente);
+router.get("/", role("cliente"), controller.listarPorCliente);
 
 // TÉCNICOS VEN SOLICITUDES DISPONIBLES
-router.get("/disponibles", auth, role("tecnico"), controller.listarDisponibles);
+router.get("/disponibles", role("tecnico"), controller.listarDisponibles);
 
-// DETALLE
-router.get("/:id", auth, controller.obtener);
+// DETALLE (cualquier usuario autenticado)
+router.get("/:id", controller.obtener);
 
-// CAMBIAR ESTADO
-router.put("/:id/estado", auth, controller.cambiarEstado);
+// CAMBIAR ESTADO (cualquier usuario autenticado)
+router.put("/:id/estado", controller.cambiarEstado);
 
 module.exports = router;

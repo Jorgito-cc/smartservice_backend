@@ -73,6 +73,16 @@ module.exports = {
 
             const ofertas = await OfertaTecnico.findAll({
                 where: { id_solicitud },
+                include: [
+                    {
+                        model: Usuario,
+                        attributes: ['id_usuario', 'nombre', 'apellido', 'foto', 'rol']
+                    },
+                    {
+                        model: require("../models").Tecnico,
+                        attributes: ['calificacion_promedio', 'descripcion']
+                    }
+                ],
                 order: [["precio", "ASC"]]
             });
 

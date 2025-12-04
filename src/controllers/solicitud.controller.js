@@ -225,5 +225,44 @@ module.exports = {
             console.error(error);
             res.status(500).json({ msg: "Error interno del servidor" });
         }
+    },
+
+    // ===========================
+    //  ADMIN: LISTAR TODAS
+    // ===========================
+    async listarTodas(req, res) {
+        try {
+            const solicitudes = await SolicitudServicio.findAll({
+                include: [
+                    {
+                        model: Cliente,
+                        include: [{
+                            model: Usuario,
+                            attributes: ['nombre', 'apellido', 'email', 'telefono']
+                        }]
+                    },
+                    {
+                        model: Categoria,
+                        attributes: ['nombre', 'descripcion']
+                    },
+                    {
+                        model: require("../models").ServicioAsignado,
+                        required: false,
+                        include: [{
+                            model: Usuario,
+                            as: 'Tecnico',
+                            attributes: ['nombre', 'apellido']
+                        }]
+                    }
+                ],
+                order: [['fecha_publicacion', 'DESC']]
+            });
+
+            res.json(solicitudes);
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error interno del servidor" });
+        }
     }
 };

@@ -179,5 +179,49 @@ module.exports = {
             console.error(err);
             res.status(500).json({ msg: "Error interno del servidor" });
         }
+    },
+
+    // ==========================================
+    //       LISTAR SERVICIOS POR CLIENTE
+    // ==========================================
+    async listarPorCliente(req, res) {
+        try {
+            const id_cliente = req.user.id_usuario;
+
+            // Necesitamos incluir el modelo Tecnico que probablemente se llame 'Tecnico' o 'Usuario' dependiendo de la asociación
+            // En index.js: ServicioAsignado.belongsTo(Tecnico, { foreignKey: "id_tecnico" });
+            // Y Tecnico.belongsTo(Usuario, { foreignKey: "id_usuario" });
+
+            const { Tecnico, Categoria } = require("../models");
+
+            const servicios = await ServicioAsignado.findAll({
+                include: [
+                    {
+                        model: SolicitudServicio,
+                        where: { id_cliente }, // Filtrar por el cliente dueño de la solicitud
+                        include: [{
+                            model: Categoria
+                        }]
+                    },
+                    {
+                        model: Tecnico,
+                        include: [{
+                            model: Usuario,
+                            attributes: ['id_usuario', 'nombre', 'apellido', 'telefono', 'foto']
+                        }]
+                    }
+                ],
+                order: [["fecha_asignacion", "DESC"]]
+            });
+
+            res.json({
+                msg: "Servicios del cliente",
+                data: servicios
+            });
+
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ msg: "Error interno del servidor" });
+        }
     }
 };

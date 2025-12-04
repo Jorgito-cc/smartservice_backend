@@ -16,7 +16,7 @@ module.exports = {
     // ==========================================
     async crearCheckout(req, res) {
         try {
-            const { id_servicio } = req.body;
+            const { id_servicio, metodo_pago = "tarjeta" } = req.body;
             const id_cliente = req.user.id_usuario;
 
             // 1. Obtener servicio
@@ -35,38 +35,64 @@ module.exports = {
             const comision = precio * 0.10;
             const neto = precio - comision;
 
-            // 4. Crear registro inicial del pago
-            await PagoServicio.create({
+            // 4. Validar método de pago
+            const metodosValidos = ["tarjeta", "qr", "efectivo", "movil"];
+            if (!metodosValidos.includes(metodo_pago)) {
+                return res.status(400).json({ msg: "Método de pago no válido" });
+            }
+
+            // 5. Si es pago con tarjeta, usar Stripe
+            if (metodo_pago === "tarjeta") {
+                // Crear registro inicial del pago
+                await PagoServicio.create({
+                    id_servicio,
+                    monto_total: precio,
+                    comision_empresa: comision,
+                    monto_tecnico: neto,
+                    estado: "pendiente",
+                    metodo_pago: "tarjeta"
+                });
+
+                // Crear sesión de Stripe Checkout
+                const session = await stripe.checkout.sessions.create({
+                    payment_method_types: ["card"],
+                    line_items: [{
+                        price_data: {
+                            currency: "usd",
+                            product_data: {
+                                name: `Pago por servicio #${id_servicio}`
+                            },
+                            unit_amount: precio * 100 // convertir a centavos
+                        },
+                        quantity: 1
+                    }],
+                    mode: "payment",
+                    success_url: `${process.env.FRONTEND_URL}/pago-exitoso?id=${id_servicio}`,
+                    cancel_url: `${process.env.FRONTEND_URL}/pago-cancelado?id=${id_servicio}`,
+                    metadata: {
+                        id_servicio
+                    }
+                });
+
+                return res.json({
+                    url: session.url
+                });
+            }
+
+            // 6. Para otros métodos (efectivo, QR, móvil), crear pago pendiente
+            const pago = await PagoServicio.create({
                 id_servicio,
                 monto_total: precio,
                 comision_empresa: comision,
                 monto_tecnico: neto,
-                estado: "pendiente"
-            });
-
-            // 5. Crear sesión de Stripe Checkout
-            const session = await stripe.checkout.sessions.create({
-                payment_method_types: ["card"],
-                line_items: [{
-                    price_data: {
-                        currency: "usd",
-                        product_data: {
-                            name: `Pago por servicio #${id_servicio}`
-                        },
-                        unit_amount: precio * 100 // convertir a centavos
-                    },
-                    quantity: 1
-                }],
-                mode: "payment",
-                success_url: `${process.env.FRONTEND_URL}/pago-exitoso?id=${id_servicio}`,
-                cancel_url: `${process.env.FRONTEND_URL}/pago-cancelado?id=${id_servicio}`,
-                metadata: {
-                    id_servicio
-                }
+                estado: "pendiente", // Requiere confirmación manual del admin
+                metodo_pago
             });
 
             res.json({
-                url: session.url
+                msg: "Pago registrado. Pendiente de confirmación.",
+                pago,
+                requiere_confirmacion: true
             });
 
         } catch (err) {
@@ -74,6 +100,7 @@ module.exports = {
             res.status(500).json({ msg: "Error creando checkout" });
         }
     },
+
     // ==========================================
     //         WEBHOOK (PAGO CONFIRMADO)
     // ==========================================
@@ -166,6 +193,43 @@ module.exports = {
         } catch (error) {
             console.error(error);
             res.status(500).json({ msg: "Error obteniendo pago" });
+        }
+    },
+
+    // ==========================================
+    //  ADMIN: LISTAR TODOS LOS PAGOS
+    // ==========================================
+    async listarTodos(req, res) {
+        try {
+            const pagos = await PagoServicio.findAll({
+                include: [{
+                    model: ServicioAsignado,
+                    include: [
+                        {
+                            model: SolicitudServicio,
+                            include: [{
+                                model: require("../models").Cliente,
+                                include: [{
+                                    model: Usuario,
+                                    attributes: ['nombre', 'apellido']
+                                }]
+                            }]
+                        },
+                        {
+                            model: Usuario,
+                            as: 'Tecnico',
+                            attributes: ['nombre', 'apellido']
+                        }
+                    ]
+                }],
+                order: [['fecha_pago', 'DESC']]
+            });
+
+            res.json(pagos);
+
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ msg: "Error interno del servidor" });
         }
     }
 };

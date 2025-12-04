@@ -19,15 +19,15 @@ module.exports = (sequelize) => {
         },
 
         monto_total: {
-            type: DataTypes.DECIMAL(10,2)
+            type: DataTypes.DECIMAL(10, 2)
         },
 
         comision_empresa: {
-            type: DataTypes.DECIMAL(10,2)
+            type: DataTypes.DECIMAL(10, 2)
         },
 
         monto_tecnico: {
-            type: DataTypes.DECIMAL(10,2)
+            type: DataTypes.DECIMAL(10, 2)
         },
 
         estado: {
@@ -35,6 +35,12 @@ module.exports = (sequelize) => {
             validate: {
                 isIn: [["pendiente", "pagado", "fallido"]]
             }
+        },
+
+        metodo_pago: {
+            type: DataTypes.ENUM("tarjeta", "qr", "efectivo", "movil"),
+            allowNull: false,
+            defaultValue: "tarjeta"
         },
 
         fecha_pago: {
