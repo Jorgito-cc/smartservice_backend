@@ -7,11 +7,9 @@
  * Los logs se crean automáticamente mediante el middleware de auditoría
  * para todas las operaciones que modifican datos (POST, PUT, PATCH, DELETE).
  */
-//asdasdasd
+
 const { AuditoriaLog, Usuario } = require("../models");
-//memememe
-//afacascasc
-//sadasdasdas
+
 module.exports = {
     /**
      * ==========================================

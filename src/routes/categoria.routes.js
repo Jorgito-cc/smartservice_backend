@@ -51,3 +51,6 @@ router.get("/", controller.listar);
 router.get("/:id", controller.obtener);
 
 module.exports = router;
+router.get("/:id", controller.obtener);
+
+module.exports = router;
