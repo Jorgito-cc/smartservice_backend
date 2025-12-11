@@ -4,6 +4,7 @@ const cors = require("cors");
 require("dotenv").config();
 
 const { sequelize } = require("./models/index");
+const fixAllSequences = require("./utils/fix-sequences");
 
 // Rutas
 const authRoutes = require("./routes/auth.routes");
@@ -55,7 +56,11 @@ app.use("/api/ml", require("./routes/ml.routes")); // 🤖 Machine Learning Micr
 
 // Conexión BD
 sequelize.sync({ alter: false })
-    .then(() => console.log("📌 Base de datos sincronizada"))
+    .then(() => {
+        console.log("📌 Base de datos sincronizada");
+        // Auto-fix secuencias desincronizadas
+        fixAllSequences();
+    })
     .catch(err => console.error("❌ Error BD:", err));
 
 module.exports = app;
