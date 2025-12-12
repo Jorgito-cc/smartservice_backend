@@ -17,5 +17,11 @@ router.get(
   role("admin"),
   controller.aconsejadorInteligente
 );
+router.get(
+  "/explicar-grafico-ingresos",
+  auth,
+  role("admin"),
+  controller.explicarGraficoIngresos
+);
 
 module.exports = router;

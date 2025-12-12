@@ -433,4 +433,97 @@ Sé específico, profesional y enfocado en acciones concretas.
       });
     }
   },
-};
+
+  // ==========================================
+  //   EXPLICAR GRÁFICO DE INGRESOS
+  // ==========================================
+  async explicarGraficoIngresos(req, res) {
+    try {
+      console.log("Iniciando explicación de gráfico de ingresos...");
+      const { desde, hasta } = req.query;
+
+      // Obtener datos de ingresos por día
+      const ingresosPorDia = await PagoServicio.findAll({
+        attributes: [
+          [sequelize.fn("DATE", sequelize.col("fecha_pago")), "fecha"],
+          [sequelize.fn("SUM", sequelize.col("monto_total")), "total"],
+          [sequelize.fn("SUM", sequelize.col("comision_empresa")), "comision"],
+        ],
+        where: {
+          estado: "pagado",
+          ...(desde &&
+            hasta && {
+              fecha_pago: {
+                [Op.between]: [new Date(desde), new Date(hasta)],
+              },
+            }),
+        },
+        group: [sequelize.fn("DATE", sequelize.col("fecha_pago"))],
+        order: [[sequelize.fn("DATE", sequelize.col("fecha_pago")), "ASC"]],
+        raw: true,
+      });
+
+      // Calcular estadísticas
+      const totales = ingresosPorDia.map((d) => parseFloat(d.total) || 0);
+      const maxIngreso = Math.max(...totales);
+      const minIngreso = Math.min(...totales);
+      const promedio = totales.reduce((a, b) => a + b, 0) / totales.length || 0;
+
+      // Detectar tendencia
+      const primeros3 = totales.slice(0, 3).reduce((a, b) => a + b, 0) / 3;
+      const ultimos3 = totales.slice(-3).reduce((a, b) => a + b, 0) / 3;
+      const tendencia = ultimos3 > primeros3 ? "creciente" : "decreciente";
+
+      // Construir prompt para Gemini
+      const prompt = `
+Analiza los datos de ingresos diarios y genera una EXPLICACIÓN CLARA Y PROFESIONAL del gráfico (máximo 150 palabras).
+
+DATOS DEL GRÁFICO:
+- Período: ${desde} al ${hasta}
+- Total de días con datos: ${ingresosPorDia.length}
+- Ingreso máximo en un día: Bs. ${maxIngreso.toFixed(2)}
+- Ingreso mínimo en un día: Bs. ${minIngreso.toFixed(2)}
+- Ingreso promedio por día: Bs. ${promedio.toFixed(2)}
+- Tendencia general: ${tendencia}
+- Variación: ${((maxIngreso - minIngreso) / promedio * 100).toFixed(2)}% de cambio respecto al promedio
+
+Datos diarios:
+${ingresosPorDia
+  .map(
+    (d) =>
+      `${d.fecha}: Bs. ${parseFloat(d.total).toFixed(2)} (comisión: Bs. ${
+        parseFloat(d.comision) || 0
+      })`
+  )
+  .join("\n")}
+
+Proporciona:
+1. Una descripción de la tendencia observada
+2. Días con mejor y peor desempeño
+3. Conclusiones sobre la salud financiera
+
+Sé conciso y directo.
+`;
+
+      console.log("Llamando a Gemini API para explicación de gráfico...");
+      const explicacion = await llamarGemini(prompt);
+      console.log("Explicación generada");
+
+      res.json({
+        explicacion,
+        estadisticas: {
+          maxIngreso: maxIngreso.toFixed(2),
+          minIngreso: minIngreso.toFixed(2),
+          promedio: promedio.toFixed(2),
+          tendencia,
+          variacion: ((maxIngreso - minIngreso) / promedio * 100).toFixed(2),
+        },
+      });
+    } catch (error) {
+      console.error("Error en explicarGraficoIngresos:", error);
+      res.status(500).json({
+        msg: "Error generando explicación del gráfico",
+        error: error.message,
+      });
+    }
+  },
