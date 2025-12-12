@@ -19,26 +19,22 @@ const GEMINI_API_URL =
 
 // Control global de rate limiting
 let ultimaLlamadaGemini = 0;
-const DELAY_MINIMO_MS = 3000; // Mínimo 3 segundos entre peticiones (aumentado)
+const DELAY_MINIMO_MS = 1500; // Mínimo 1.5 segundos entre peticiones (reducido)
 
-// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF MUY AGRESIVO
-async function llamarGemini(prompt, reintentos = 10) {
+// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF OPTIMIZADO
+async function llamarGemini(prompt, reintentos = 5) {
   // Respetar delay mínimo entre peticiones
   const ahora = Date.now();
   const tiempoEspera = DELAY_MINIMO_MS - (ahora - ultimaLlamadaGemini);
   if (tiempoEspera > 0) {
-    console.log(`⏳ Esperando ${tiempoEspera}ms para respetar rate limit...`);
+    console.log(`⏳ Esperando ${tiempoEspera}ms...`);
     await new Promise((resolve) => setTimeout(resolve, tiempoEspera));
   }
   ultimaLlamadaGemini = Date.now();
 
   for (let intento = 0; intento < reintentos; intento++) {
     try {
-      console.log(
-        `🔄 Gemini: Intento ${
-          intento + 1
-        }/${reintentos} - ${new Date().toISOString()}`
-      );
+      console.log(`🔄 Gemini intento ${intento + 1}/${reintentos}`);
       const response = await axios.post(
         `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
         {
@@ -56,7 +52,7 @@ async function llamarGemini(prompt, reintentos = 10) {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 90000, // 90 segundos para dar más tiempo
+          timeout: 90000,
         }
       );
 
@@ -65,52 +61,37 @@ async function llamarGemini(prompt, reintentos = 10) {
         response.data.candidates &&
         response.data.candidates[0]
       ) {
-        console.log("✅ Gemini respondió exitosamente en intento", intento + 1);
+        console.log("✅ Gemini OK en intento", intento + 1);
         return response.data.candidates[0].content.parts[0].text;
       }
-      console.error("⚠️ Respuesta de Gemini sin contenido:", response.data);
       return "No se pudo generar la respuesta";
     } catch (error) {
       const statusCode = error.response?.status;
       const esRateLimit = statusCode === 429;
       const esTimeout = error.code === "ECONNABORTED" || statusCode === 503;
 
-      console.error(`❌ Intento ${intento + 1}/${reintentos} fallido:`, {
-        status: statusCode,
-        message: error.message,
-        esRateLimit,
-        esTimeout,
-      });
-
-      // Si es rate limit (429), timeout (503) o error de conexión
+      // Si es rate limit o timeout y hay reintentos
       if (
         (esRateLimit || esTimeout || statusCode >= 500) &&
         intento < reintentos - 1
       ) {
-        // Exponential backoff MUCHO MÁS AGRESIVO: 3s, 6s, 12s, 24s, 48s, 96s...
-        const esperarMs = Math.pow(2, intento) * 3000;
+        // Backoff más moderado: 1.5s, 3s, 6s, 12s, 24s
+        const esperarMs = Math.pow(1.5, intento) * 1500;
         const esperarSeg = Math.round(esperarMs / 1000);
-        console.log(
-          `⏳ Rate limit/timeout detectado. Esperando ${esperarSeg}s (${esperarMs}ms) antes de reintentar...`
-        );
+        console.log(`⏳ Reintentando en ${esperarSeg}s...`);
         await new Promise((resolve) => setTimeout(resolve, esperarMs));
         continue;
       }
 
-      // Si es el último intento, lanzar excepción
+      // Si es el último intento
       if (intento === reintentos - 1) {
-        console.error(
-          `🚫 Fallaron todos los ${reintentos} intentos. Status: ${statusCode}`
-        );
-        throw new Error(
-          `Error de API de Gemini (${statusCode}): ${error.message}`
-        );
+        throw new Error(`Error Gemini (${statusCode}): ${error.message}`);
       }
     }
   }
 }
 
-// Obtener datos del período para análisis// Obtener datos del período para análisis
+// Obtener datos del período para análisis - OPTIMIZADO CON QUERIES PARALELAS
 async function obtenerDatosAnalisis(desde, hasta) {
   const where = {};
 
@@ -120,131 +101,130 @@ async function obtenerDatosAnalisis(desde, hasta) {
     };
   }
 
-  // Total de servicios
-  const totalServicios = await ServicioAsignado.count();
-  const serviciosCompletados = await ServicioAsignado.count({
-    where: { estado: "completado" },
-  });
-
-  // Ingresos
-  const ingresosTotales =
-    (await PagoServicio.sum("monto_total", {
-      where: { estado: "pagado", ...where },
-    })) || 0;
-
-  const comisionTotales =
-    (await PagoServicio.sum("comision_empresa", {
-      where: { estado: "pagado", ...where },
-    })) || 0;
-
-  const montoPendiente =
-    (await PagoServicio.sum("monto_total", {
-      where: { estado: "pendiente", ...where },
-    })) || 0;
-
-  // Servicios por categoría - Query SQL puro para evitar problemas de Sequelize
-  const serviciosPorCategoria = await sequelize.query(
-    `SELECT 
-      COUNT(ss.id_solicitud) as total,
-      c.id_categoria,
-      c.nombre
-    FROM solicitud_servicio ss
-    LEFT JOIN categoria c ON ss.id_categoria = c.id_categoria
-    GROUP BY c.id_categoria, c.nombre
-    ORDER BY total DESC
-    LIMIT 5`,
-    { type: sequelize.QueryTypes.SELECT }
-  );
-
-  // Top técnicos - Query SQL puro
-  const topTecnicos = await sequelize.query(
-    `SELECT 
-      sa.id_tecnico,
-      COUNT(sa.id_servicio) as total_servicios,
-      t.calificacion_promedio,
-      u.nombre,
-      u.apellido
-    FROM servicio_asignado sa
-    INNER JOIN tecnico t ON sa.id_tecnico = t.id_tecnico
-    INNER JOIN usuario u ON t.id_tecnico = u.id_usuario
-    GROUP BY sa.id_tecnico, t.id_tecnico, t.calificacion_promedio, u.id_usuario, u.nombre, u.apellido
-    ORDER BY total_servicios DESC
-    LIMIT 3`,
-    { type: sequelize.QueryTypes.SELECT }
-  );
-
-  // Usuarios
-  const totalClientes = await Cliente.count();
-  const totalTecnicos = await Tecnico.count();
-  const tecnicosActivos = await Tecnico.count({
-    where: { disponibilidad: true },
-  });
-
-  // Ingresos por día (últimos 7 días) para análisis de tendencias
-  const hace7Dias = new Date();
-  hace7Dias.setDate(hace7Dias.getDate() - 7);
-
-  const ingresosPorDia = await PagoServicio.findAll({
-    attributes: [
-      [sequelize.fn("DATE", sequelize.col("fecha_pago")), "fecha"],
-      [sequelize.fn("SUM", sequelize.col("monto_total")), "total"],
-    ],
-    where: {
-      estado: "pagado",
-      fecha_pago: { [Op.gte]: hace7Dias },
-    },
-    group: [sequelize.fn("DATE", sequelize.col("fecha_pago"))],
-    order: [[sequelize.fn("DATE", sequelize.col("fecha_pago")), "ASC"]],
-    raw: true,
-  });
-
-  // Pagos pendientes
-  const pagosPendientes = await PagoServicio.count({
-    where: { estado: "pendiente", ...where },
-  });
-
-  return {
-    servicios: {
-      total: totalServicios,
-      completados: serviciosCompletados,
-      porcentajeCompletacion:
-        totalServicios > 0
-          ? ((serviciosCompletados / totalServicios) * 100).toFixed(2)
-          : 0,
-    },
-    ingresos: {
-      total: parseFloat(ingresosTotales),
-      comision: parseFloat(comisionTotales),
-      pendiente: parseFloat(montoPendiente),
-      porcentajePendiente:
-        ingresosTotales > 0
-          ? (
-              (montoPendiente / (ingresosTotales + montoPendiente)) *
-              100
-            ).toFixed(2)
-          : 0,
-    },
-    usuarios: {
-      clientes: totalClientes,
-      tecnicos: totalTecnicos,
+  try {
+    // EJECUTAR TODAS LAS QUERIES EN PARALELO con Promise.all()
+    const [
+      totalServicios,
+      serviciosCompletados,
+      ingresosTotales,
+      comisionTotales,
+      montoPendiente,
+      serviciosPorCategoria,
+      topTecnicos,
+      totalClientes,
+      totalTecnicos,
       tecnicosActivos,
-    },
-    categorias: serviciosPorCategoria.map((c) => ({
-      nombre: c.nombre || "Sin categoría",
-      total: parseInt(c.total) || 0,
-    })),
-    tecnicos: topTecnicos.map((t) => ({
-      nombre: t.nombre,
-      apellido: t.apellido,
-      servicios: parseInt(t.total_servicios) || 0,
-      calificacion: parseFloat(t.calificacion_promedio) || 0,
-    })),
-    pagos: {
-      pendientes: pagosPendientes,
-      pendienteMonto: montoPendiente,
-    },
-    tendencia: ingresosPorDia,
-  };
+      ingresosPorDia,
+      pagosPendientes,
+    ] = await Promise.all([
+      // 1. Total servicios
+      ServicioAsignado.count(),
+      // 2. Servicios completados
+      ServicioAsignado.count({ where: { estado: "completado" } }),
+      // 3. Ingresos totales
+      PagoServicio.sum("monto_total", {
+        where: { estado: "pagado", ...where },
+      }),
+      // 4. Comisión totales
+      PagoServicio.sum("comision_empresa", {
+        where: { estado: "pagado", ...where },
+      }),
+      // 5. Monto pendiente
+      PagoServicio.sum("monto_total", {
+        where: { estado: "pendiente", ...where },
+      }),
+      // 6. Servicios por categoría - Query SQL SIMPLIFICADA
+      sequelize.query(
+        `SELECT COUNT(ss.id_solicitud) as total, c.nombre
+         FROM solicitud_servicio ss
+         LEFT JOIN categoria c ON ss.id_categoria = c.id_categoria
+         GROUP BY c.id_categoria, c.nombre
+         ORDER BY total DESC LIMIT 5`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      // 7. Top técnicos - Query SQL SIMPLIFICADA
+      sequelize.query(
+        `SELECT sa.id_tecnico, COUNT(sa.id_servicio) as total_servicios,
+                t.calificacion_promedio, u.nombre, u.apellido
+         FROM servicio_asignado sa
+         INNER JOIN tecnico t ON sa.id_tecnico = t.id_tecnico
+         INNER JOIN usuario u ON t.id_tecnico = u.id_usuario
+         GROUP BY sa.id_tecnico, t.id_tecnico, u.id_usuario
+         ORDER BY total_servicios DESC LIMIT 3`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      // 8. Total clientes
+      Cliente.count(),
+      // 9. Total técnicos
+      Tecnico.count(),
+      // 10. Técnicos activos
+      Tecnico.count({ where: { disponibilidad: true } }),
+      // 11. Ingresos por día (últimos 7 días)
+      PagoServicio.findAll({
+        attributes: [
+          [sequelize.fn("DATE", sequelize.col("fecha_pago")), "fecha"],
+          [sequelize.fn("SUM", sequelize.col("monto_total")), "total"],
+        ],
+        where: {
+          estado: "pagado",
+          fecha_pago: {
+            [Op.gte]: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+          },
+        },
+        group: [sequelize.fn("DATE", sequelize.col("fecha_pago"))],
+        order: [[sequelize.fn("DATE", sequelize.col("fecha_pago")), "ASC"]],
+        raw: true,
+      }),
+      // 12. Pagos pendientes
+      PagoServicio.count({ where: { estado: "pendiente", ...where } }),
+    ]);
+
+    return {
+      servicios: {
+        total: totalServicios,
+        completados: serviciosCompletados,
+        porcentajeCompletacion:
+          totalServicios > 0
+            ? ((serviciosCompletados / totalServicios) * 100).toFixed(2)
+            : 0,
+      },
+      ingresos: {
+        total: parseFloat(ingresosTotales) || 0,
+        comision: parseFloat(comisionTotales) || 0,
+        pendiente: parseFloat(montoPendiente) || 0,
+        porcentajePendiente:
+          ingresosTotales > 0
+            ? (
+                (montoPendiente / (ingresosTotales + montoPendiente)) *
+                100
+              ).toFixed(2)
+            : 0,
+      },
+      usuarios: {
+        clientes: totalClientes,
+        tecnicos: totalTecnicos,
+        tecnicosActivos,
+      },
+      categorias: (serviciosPorCategoria || []).map((c) => ({
+        nombre: c.nombre || "Sin categoría",
+        total: parseInt(c.total) || 0,
+      })),
+      tecnicos: (topTecnicos || []).map((t) => ({
+        nombre: t.nombre,
+        apellido: t.apellido,
+        servicios: parseInt(t.total_servicios) || 0,
+        calificacion: parseFloat(t.calificacion_promedio) || 0,
+      })),
+      pagos: {
+        pendientes: pagosPendientes,
+        pendienteMonto: montoPendiente,
+      },
+      tendencia: ingresosPorDia || [],
+    };
+  } catch (error) {
+    console.error("Error en obtenerDatosAnalisis:", error);
+    throw error;
+  }
 }
 
 module.exports = {
