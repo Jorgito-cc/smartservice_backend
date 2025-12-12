@@ -15,7 +15,7 @@ const solicitudRoutes = require("./routes/solicitud.routes");
 const ofertaRoutes = require("./routes/oferta.routes");
 const servicioRoutes = require("./routes/servicio.routes");
 const auditoria = require("./middleware/auditoria.middleware");
-// nuevos cambios 
+// nuevos cambios
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -51,16 +51,18 @@ app.use("/api/chat", require("./routes/chat.routes"));
 app.use("/api/notificaciones", require("./routes/notificacion.routes"));
 app.use("/api/auditoria", require("./routes/auditoria.routes"));
 app.use("/api/reportes", require("./routes/reportes.routes"));
+app.use("/api/analisis", require("./routes/analisis.routes"));
 app.use("/api/ubicacion", require("./routes/ubicacion.routes"));
 app.use("/api/ml", require("./routes/ml.routes")); // 🤖 Machine Learning Microservice Integration
 
 // Conexión BD
-sequelize.sync({ alter: false })
-    .then(() => {
-        console.log("📌 Base de datos sincronizada");
-        // Auto-fix secuencias desincronizadas
-        fixAllSequences();
-    })
-    .catch(err => console.error("❌ Error BD:", err));
+sequelize
+  .sync({ alter: false })
+  .then(() => {
+    console.log("📌 Base de datos sincronizada");
+    // Auto-fix secuencias desincronizadas
+    fixAllSequences();
+  })
+  .catch((err) => console.error("❌ Error BD:", err));
 
 module.exports = app;
