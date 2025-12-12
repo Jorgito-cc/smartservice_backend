@@ -19,18 +19,20 @@ const GEMINI_API_URL =
 
 // Control global de rate limiting
 let ultimaLlamadaGemini = 0;
-const DELAY_MINIMO_MS = 1500; // Mínimo 1.5 segundos entre peticiones (reducido)
+const DELAY_MINIMO_MS = 2000; // Mínimo 2 segundos entre peticiones (aumentado)
 
-// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF OPTIMIZADO
-async function llamarGemini(prompt, reintentos = 5) {
+// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF AGRESIVO
+async function llamarGemini(prompt, reintentos = 8) {
   // Respetar delay mínimo entre peticiones
   const ahora = Date.now();
   const tiempoEspera = DELAY_MINIMO_MS - (ahora - ultimaLlamadaGemini);
   if (tiempoEspera > 0) {
-    console.log(`⏳ Esperando ${tiempoEspera}ms...`);
+    console.log(`⏳ Esperando ${tiempoEspera}ms antes de llamar Gemini...`);
     await new Promise((resolve) => setTimeout(resolve, tiempoEspera));
   }
   ultimaLlamadaGemini = Date.now();
+
+  let ultimoError = null;
 
   for (let intento = 0; intento < reintentos; intento++) {
     try {
@@ -52,7 +54,7 @@ async function llamarGemini(prompt, reintentos = 5) {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 90000,
+          timeout: 120000, // Aumentado a 120 segundos
         }
       );
 
@@ -69,26 +71,45 @@ async function llamarGemini(prompt, reintentos = 5) {
       const statusCode = error.response?.status;
       const esRateLimit = statusCode === 429;
       const esTimeout = error.code === "ECONNABORTED" || statusCode === 503;
+      const esError5xx = statusCode >= 500;
 
-      // Si es rate limit o timeout y hay reintentos
-      if (
-        (esRateLimit || esTimeout || statusCode >= 500) &&
-        intento < reintentos - 1
-      ) {
-        // Backoff más moderado: 1.5s, 3s, 6s, 12s, 24s
-        const esperarMs = Math.pow(1.5, intento) * 1500;
+      ultimoError = error;
+
+      console.log(
+        `❌ Error ${statusCode} en intento ${intento + 1}: ${error.message}`
+      );
+
+      // Si hay más reintentos, esperar y continuar
+      if (intento < reintentos - 1) {
+        let esperarMs;
+
+        if (esRateLimit) {
+          // Para 429: espera exponencial más agresiva: 3s, 6s, 12s, 24s, 48s, 96s, 192s, 384s
+          esperarMs = Math.pow(2, intento) * 3000;
+          console.log(`⚠️ Rate limit (429) detectado - esperando mucho...`);
+        } else if (esTimeout || esError5xx) {
+          // Para timeouts/5xx: espera exponencial moderada
+          esperarMs = Math.pow(1.5, intento) * 2000;
+        } else {
+          // Para otros errores: espera rápida
+          esperarMs = 1000;
+        }
+
         const esperarSeg = Math.round(esperarMs / 1000);
-        console.log(`⏳ Reintentando en ${esperarSeg}s...`);
+        console.log(
+          `⏳ Reintentando en ${esperarSeg}s (intento ${intento + 1}/${
+            reintentos - 1
+          })...`
+        );
         await new Promise((resolve) => setTimeout(resolve, esperarMs));
         continue;
       }
-
-      // Si es el último intento
-      if (intento === reintentos - 1) {
-        throw new Error(`Error Gemini (${statusCode}): ${error.message}`);
-      }
     }
   }
+
+  // Si llegamos aquí, agotamos todos los reintentos
+  console.error("❌ Agotados todos los reintentos de Gemini");
+  throw ultimoError || new Error("Error desconocido al llamar Gemini API");
 }
 
 // Obtener datos del período para análisis - OPTIMIZADO CON QUERIES PARALELAS
