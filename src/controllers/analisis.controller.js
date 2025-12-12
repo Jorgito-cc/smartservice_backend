@@ -17,46 +17,63 @@ const GEMINI_API_KEY = "AIzaSyBxE61y03VPiXldGlbqGid5LB3_GqguDxQ";
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-// Función auxiliar para llamar a Gemini
-async function llamarGemini(prompt) {
-  try {
-    const response = await axios.post(
-      `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
-      {
-        contents: [
-          {
-            parts: [
-              {
-                text: prompt,
-              },
-            ],
-          },
-        ],
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
+// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF
+async function llamarGemini(prompt, reintentos = 3) {
+  for (let intento = 0; intento < reintentos; intento++) {
+    try {
+      const response = await axios.post(
+        `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
+        {
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
         },
-        timeout: 30000,
-      }
-    );
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        }
+      );
 
-    if (
-      response.data &&
-      response.data.candidates &&
-      response.data.candidates[0]
-    ) {
-      return response.data.candidates[0].content.parts[0].text;
+      if (
+        response.data &&
+        response.data.candidates &&
+        response.data.candidates[0]
+      ) {
+        return response.data.candidates[0].content.parts[0].text;
+      }
+      console.error("Respuesta de Gemini sin contenido:", response.data);
+      return "No se pudo generar la respuesta";
+    } catch (error) {
+      const statusCode = error.response?.status;
+      const esRateLimit = statusCode === 429;
+
+      console.error(`Intento ${intento + 1}/${reintentos} fallido:`, {
+        message: error.message,
+        status: statusCode,
+        esRateLimit,
+      });
+
+      // Si es rate limit (429) y hay reintentos disponibles, esperar y reintentar
+      if (esRateLimit && intento < reintentos - 1) {
+        const esperarMs = Math.pow(2, intento) * 1000; // 1s, 2s, 4s
+        console.log(
+          `Rate limit detectado. Esperando ${esperarMs}ms antes de reintentar...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, esperarMs));
+        continue;
+      }
+
+      // Si es el último intento o un error diferente, lanzar excepción
+      throw new Error(`Error de API de Gemini: ${error.message}`);
     }
-    console.error("Respuesta de Gemini sin contenido:", response.data);
-    return "No se pudo generar la respuesta";
-  } catch (error) {
-    console.error("Error llamando a Gemini API:", {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data,
-    });
-    throw new Error(`Error de API de Gemini: ${error.message}`);
   }
 }
 
