@@ -13,21 +13,21 @@ const { Op } = require("sequelize");
 const axios = require("axios");
 
 // Clave de API de Google Gemini
-const GEMINI_API_KEY = "AIzaSyBxE61y03VPiXldGlbqGid5LB3_GqguDxQ";
+const GEMINI_API_KEY = "AIzaSyB78Du7timMnSZ_Ma8japB8C1md9NwPh2k";
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
 // Control global de rate limiting
 let ultimaLlamadaGemini = 0;
-const DELAY_MINIMO_MS = 2000; // Mínimo 2 segundos entre peticiones
+const DELAY_MINIMO_MS = 3000; // Mínimo 3 segundos entre peticiones (aumentado)
 
-// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF MEJORADO
-async function llamarGemini(prompt, reintentos = 5) {
+// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF MUY AGRESIVO
+async function llamarGemini(prompt, reintentos = 10) {
   // Respetar delay mínimo entre peticiones
   const ahora = Date.now();
   const tiempoEspera = DELAY_MINIMO_MS - (ahora - ultimaLlamadaGemini);
   if (tiempoEspera > 0) {
-    console.log(`Esperando ${tiempoEspera}ms para respetar rate limit...`);
+    console.log(`⏳ Esperando ${tiempoEspera}ms para respetar rate limit...`);
     await new Promise((resolve) => setTimeout(resolve, tiempoEspera));
   }
   ultimaLlamadaGemini = Date.now();
@@ -35,7 +35,7 @@ async function llamarGemini(prompt, reintentos = 5) {
   for (let intento = 0; intento < reintentos; intento++) {
     try {
       console.log(
-        `Gemini: Intento ${
+        `🔄 Gemini: Intento ${
           intento + 1
         }/${reintentos} - ${new Date().toISOString()}`
       );
@@ -56,7 +56,7 @@ async function llamarGemini(prompt, reintentos = 5) {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 60000, // Aumentado a 60 segundos
+          timeout: 90000, // 90 segundos para dar más tiempo
         }
       );
 
@@ -65,7 +65,7 @@ async function llamarGemini(prompt, reintentos = 5) {
         response.data.candidates &&
         response.data.candidates[0]
       ) {
-        console.log("✅ Gemini respondió exitosamente");
+        console.log("✅ Gemini respondió exitosamente en intento", intento + 1);
         return response.data.candidates[0].content.parts[0].text;
       }
       console.error("⚠️ Respuesta de Gemini sin contenido:", response.data);
@@ -87,18 +87,21 @@ async function llamarGemini(prompt, reintentos = 5) {
         (esRateLimit || esTimeout || statusCode >= 500) &&
         intento < reintentos - 1
       ) {
-        // Exponential backoff más agresivo: 2s, 4s, 8s, 16s, 32s
-        const esperarMs = Math.pow(2, intento + 1) * 1000;
+        // Exponential backoff MUCHO MÁS AGRESIVO: 3s, 6s, 12s, 24s, 48s, 96s...
+        const esperarMs = Math.pow(2, intento) * 3000;
+        const esperarSeg = Math.round(esperarMs / 1000);
         console.log(
-          `⏳ Rate limit/timeout detectado. Esperando ${esperarMs}ms antes de reintentar...`
+          `⏳ Rate limit/timeout detectado. Esperando ${esperarSeg}s (${esperarMs}ms) antes de reintentar...`
         );
         await new Promise((resolve) => setTimeout(resolve, esperarMs));
         continue;
       }
 
-      // Si es el último intento o un error definitivo, lanzar excepción
+      // Si es el último intento, lanzar excepción
       if (intento === reintentos - 1) {
-        console.error(`🚫 Fallaron todos los ${reintentos} intentos`);
+        console.error(
+          `🚫 Fallaron todos los ${reintentos} intentos. Status: ${statusCode}`
+        );
         throw new Error(
           `Error de API de Gemini (${statusCode}): ${error.message}`
         );
@@ -107,7 +110,7 @@ async function llamarGemini(prompt, reintentos = 5) {
   }
 }
 
-// Obtener datos del período para análisis
+// Obtener datos del período para análisis// Obtener datos del período para análisis
 async function obtenerDatosAnalisis(desde, hasta) {
   const where = {};
 
