@@ -15,41 +15,10 @@ const solicitudRoutes = require("./routes/solicitud.routes");
 const ofertaRoutes = require("./routes/oferta.routes");
 const servicioRoutes = require("./routes/servicio.routes");
 const auditoria = require("./middleware/auditoria.middleware");
-
 // nuevos cambios
 const app = express();
-
-// ==========================================
-// CONFIGURACIÓN DE CORS MEJORADA
-// ==========================================
-const corsOptions = {
-  origin: function (origin, callback) {
-    const allowedOrigins = [
-      "http://localhost:3000",
-      "http://localhost:5173",
-      "http://localhost:5174",
-      "https://smartservicet.netlify.app",
-      "https://smartservice-admin.netlify.app",
-      "https://smartservice.netlify.app",
-    ];
-
-    // Permitir requests sin origin (mobile, desktop apps)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.warn(`⚠️ CORS bloqueado para origen: ${origin}`);
-      callback(new Error("CORS no permitido para este origen"));
-    }
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  optionsSuccessStatus: 200,
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(express.json());
-
 // cambios nuevos
 // Servir archivos estáticos del frontend web
 const path = require("path");
