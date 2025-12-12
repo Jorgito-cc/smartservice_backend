@@ -92,58 +92,36 @@ async function obtenerDatosAnalisis(desde, hasta) {
       where: { estado: "pendiente", ...where },
     })) || 0;
 
-  // Servicios por categoría - Sin usar raw para que el include funcione correctamente
-  const serviciosPorCategoria = await SolicitudServicio.findAll({
-    attributes: [
-      [
-        sequelize.fn("COUNT", sequelize.col("SolicitudServicio.id_solicitud")),
-        "total",
-      ],
-    ],
-    include: [
-      {
-        model: Categoria,
-        attributes: ["id_categoria", "nombre"],
-        required: false,
-      },
-    ],
-    group: ["Categoria.id_categoria"],
-    order: [
-      [sequelize.literal("COUNT(SolicitudServicio.id_solicitud)"), "DESC"],
-    ],
-    limit: 5,
-    subQuery: false,
-  });
+  // Servicios por categoría - Query SQL puro para evitar problemas de Sequelize
+  const serviciosPorCategoria = await sequelize.query(
+    `SELECT 
+      COUNT(ss.id_solicitud) as total,
+      c.id_categoria,
+      c.nombre
+    FROM solicitud_servicio ss
+    LEFT JOIN categoria c ON ss.id_categoria = c.id_categoria
+    GROUP BY c.id_categoria, c.nombre
+    ORDER BY total DESC
+    LIMIT 5`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
 
-  // Top técnicos - simplificado sin raw
-  const topTecnicos = await ServicioAsignado.findAll({
-    attributes: [
-      "id_tecnico",
-      [sequelize.fn("COUNT", sequelize.col("id_servicio")), "total_servicios"],
-    ],
-    include: [
-      {
-        model: Tecnico,
-        attributes: ["calificacion_promedio"],
-        required: true,
-        include: [
-          {
-            model: Usuario,
-            attributes: ["nombre", "apellido"],
-            required: true,
-          },
-        ],
-      },
-    ],
-    group: [
-      "ServicioAsignado.id_tecnico",
-      "Tecnico.id_tecnico",
-      "Tecnico->Usuario.id_usuario",
-    ],
-    order: [[sequelize.literal("COUNT(ServicioAsignado.id_servicio)"), "DESC"]],
-    limit: 3,
-    subQuery: false,
-  });
+  // Top técnicos - Query SQL puro
+  const topTecnicos = await sequelize.query(
+    `SELECT 
+      sa.id_tecnico,
+      COUNT(sa.id_servicio) as total_servicios,
+      t.calificacion_promedio,
+      u.nombre,
+      u.apellido
+    FROM servicio_asignado sa
+    INNER JOIN tecnico t ON sa.id_tecnico = t.id_tecnico
+    INNER JOIN usuario u ON t.id_tecnico = u.id_usuario
+    GROUP BY sa.id_tecnico, t.id_tecnico, t.calificacion_promedio, u.id_usuario, u.nombre, u.apellido
+    ORDER BY total_servicios DESC
+    LIMIT 3`,
+    { type: sequelize.QueryTypes.SELECT }
+  );
 
   // Usuarios
   const totalClientes = await Cliente.count();
@@ -202,16 +180,14 @@ async function obtenerDatosAnalisis(desde, hasta) {
       tecnicosActivos,
     },
     categorias: serviciosPorCategoria.map((c) => ({
-      nombre: c.Categoria?.nombre || "Sin categoría",
-      total: parseInt(c.dataValues?.total || 0),
+      nombre: c.nombre || "Sin categoría",
+      total: parseInt(c.total) || 0,
     })),
     tecnicos: topTecnicos.map((t) => ({
-      nombre: t.Tecnico?.Usuario?.nombre,
-      apellido: t.Tecnico?.Usuario?.apellido,
-      servicios: parseInt(
-        t.dataValues?.total_servicios || t.total_servicios || 0
-      ),
-      calificacion: parseFloat(t.Tecnico?.calificacion_promedio || 0),
+      nombre: t.nombre,
+      apellido: t.apellido,
+      servicios: parseInt(t.total_servicios) || 0,
+      calificacion: parseFloat(t.calificacion_promedio) || 0,
     })),
     pagos: {
       pendientes: pagosPendientes,
