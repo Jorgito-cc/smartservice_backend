@@ -17,10 +17,28 @@ const GEMINI_API_KEY = "AIzaSyBxE61y03VPiXldGlbqGid5LB3_GqguDxQ";
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
 
-// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF
-async function llamarGemini(prompt, reintentos = 3) {
+// Control global de rate limiting
+let ultimaLlamadaGemini = 0;
+const DELAY_MINIMO_MS = 2000; // Mínimo 2 segundos entre peticiones
+
+// Función auxiliar para llamar a Gemini CON RETRY Y BACKOFF MEJORADO
+async function llamarGemini(prompt, reintentos = 5) {
+  // Respetar delay mínimo entre peticiones
+  const ahora = Date.now();
+  const tiempoEspera = DELAY_MINIMO_MS - (ahora - ultimaLlamadaGemini);
+  if (tiempoEspera > 0) {
+    console.log(`Esperando ${tiempoEspera}ms para respetar rate limit...`);
+    await new Promise((resolve) => setTimeout(resolve, tiempoEspera));
+  }
+  ultimaLlamadaGemini = Date.now();
+
   for (let intento = 0; intento < reintentos; intento++) {
     try {
+      console.log(
+        `Gemini: Intento ${
+          intento + 1
+        }/${reintentos} - ${new Date().toISOString()}`
+      );
       const response = await axios.post(
         `${GEMINI_API_URL}?key=${GEMINI_API_KEY}`,
         {
@@ -38,7 +56,7 @@ async function llamarGemini(prompt, reintentos = 3) {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 30000,
+          timeout: 60000, // Aumentado a 60 segundos
         }
       );
 
@@ -47,32 +65,44 @@ async function llamarGemini(prompt, reintentos = 3) {
         response.data.candidates &&
         response.data.candidates[0]
       ) {
+        console.log("✅ Gemini respondió exitosamente");
         return response.data.candidates[0].content.parts[0].text;
       }
-      console.error("Respuesta de Gemini sin contenido:", response.data);
+      console.error("⚠️ Respuesta de Gemini sin contenido:", response.data);
       return "No se pudo generar la respuesta";
     } catch (error) {
       const statusCode = error.response?.status;
       const esRateLimit = statusCode === 429;
+      const esTimeout = error.code === "ECONNABORTED" || statusCode === 503;
 
-      console.error(`Intento ${intento + 1}/${reintentos} fallido:`, {
-        message: error.message,
+      console.error(`❌ Intento ${intento + 1}/${reintentos} fallido:`, {
         status: statusCode,
+        message: error.message,
         esRateLimit,
+        esTimeout,
       });
 
-      // Si es rate limit (429) y hay reintentos disponibles, esperar y reintentar
-      if (esRateLimit && intento < reintentos - 1) {
-        const esperarMs = Math.pow(2, intento) * 1000; // 1s, 2s, 4s
+      // Si es rate limit (429), timeout (503) o error de conexión
+      if (
+        (esRateLimit || esTimeout || statusCode >= 500) &&
+        intento < reintentos - 1
+      ) {
+        // Exponential backoff más agresivo: 2s, 4s, 8s, 16s, 32s
+        const esperarMs = Math.pow(2, intento + 1) * 1000;
         console.log(
-          `Rate limit detectado. Esperando ${esperarMs}ms antes de reintentar...`
+          `⏳ Rate limit/timeout detectado. Esperando ${esperarMs}ms antes de reintentar...`
         );
         await new Promise((resolve) => setTimeout(resolve, esperarMs));
         continue;
       }
 
-      // Si es el último intento o un error diferente, lanzar excepción
-      throw new Error(`Error de API de Gemini: ${error.message}`);
+      // Si es el último intento o un error definitivo, lanzar excepción
+      if (intento === reintentos - 1) {
+        console.error(`🚫 Fallaron todos los ${reintentos} intentos`);
+        throw new Error(
+          `Error de API de Gemini (${statusCode}): ${error.message}`
+        );
+      }
     }
   }
 }
