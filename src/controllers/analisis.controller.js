@@ -13,9 +13,9 @@ const { Op } = require("sequelize");
 const axios = require("axios");
 
 // Clave de API de Google Gemini
-const GEMINI_API_KEY = "AIzaSyBxE61y03VPiXldGlbqGid5LB3_GqguDxQ";
+const GEMINI_API_KEY = "AIzaSyB78Du7timMnSZ_Ma8japB8C1md9NwPh2k";
 const GEMINI_API_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent";
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent";
 
 // Función auxiliar para llamar a Gemini
 async function llamarGemini(prompt) {
