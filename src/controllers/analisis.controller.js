@@ -37,6 +37,7 @@ async function llamarGemini(prompt) {
         headers: {
           "Content-Type": "application/json",
         },
+        timeout: 30000,
       }
     );
 
@@ -47,10 +48,15 @@ async function llamarGemini(prompt) {
     ) {
       return response.data.candidates[0].content.parts[0].text;
     }
-    return null;
+    console.error("Respuesta de Gemini sin contenido:", response.data);
+    return "No se pudo generar la respuesta";
   } catch (error) {
-    console.error("Error llamando a Gemini API:", error.message);
-    throw error;
+    console.error("Error llamando a Gemini API:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data,
+    });
+    throw new Error(`Error de API de Gemini: ${error.message}`);
   }
 }
 
@@ -97,12 +103,14 @@ async function obtenerDatosAnalisis(desde, hasta) {
     include: [
       {
         model: Categoria,
-        attributes: ["nombre"],
+        attributes: ["id_categoria", "nombre"],
       },
     ],
-    group: ["Categorium.id_categoria", "Categorium.nombre"],
+    group: ["Categoria.id_categoria", "Categoria.nombre"],
     order: [[sequelize.literal("total"), "DESC"]],
     limit: 5,
+    raw: true,
+    subQuery: false,
   });
 
   // Top técnicos
@@ -192,13 +200,13 @@ async function obtenerDatosAnalisis(desde, hasta) {
       tecnicosActivos,
     },
     categorias: serviciosPorCategoria.map((c) => ({
-      nombre: c.Categorium?.nombre || "Sin categoría",
-      total: parseInt(c.dataValues.total),
+      nombre: c.Categoria?.nombre || "Sin categoría",
+      total: parseInt(c.total),
     })),
     tecnicos: topTecnicos.map((t) => ({
       nombre: t.Tecnico?.Usuario?.nombre,
       apellido: t.Tecnico?.Usuario?.apellido,
-      servicios: parseInt(t.dataValues.total_servicios),
+      servicios: parseInt(t.total_servicios),
       calificacion: parseFloat(t.Tecnico?.calificacion_promedio || 0),
     })),
     pagos: {
@@ -215,8 +223,12 @@ module.exports = {
   // ==========================================
   async interpretacionInteligente(req, res) {
     try {
+      console.log("Iniciando interpretación inteligente...");
       const { desde, hasta } = req.query;
+      console.log("Parámetros:", { desde, hasta });
+
       const datos = await obtenerDatosAnalisis(desde, hasta);
+      console.log("Datos obtenidos correctamente");
 
       // Construir prompt para Gemini
       const prompt = `
@@ -257,7 +269,9 @@ Genera un análisis que responda estas preguntas:
 Formato: Párrafos cortos, directo al punto, profesional.
 `;
 
+      console.log("Llamando a Gemini API...");
       const interpretacion = await llamarGemini(prompt);
+      console.log("Respuesta de Gemini recibida");
 
       res.json({
         interpretacion,
@@ -265,7 +279,10 @@ Formato: Párrafos cortos, directo al punto, profesional.
       });
     } catch (error) {
       console.error("Error en interpretacionInteligente:", error);
-      res.status(500).json({ msg: "Error generando interpretación" });
+      res.status(500).json({
+        msg: "Error generando interpretación",
+        error: error.message,
+      });
     }
   },
 
@@ -274,8 +291,12 @@ Formato: Párrafos cortos, directo al punto, profesional.
   // ==========================================
   async aconsejadorInteligente(req, res) {
     try {
+      console.log("Iniciando aconsejador inteligente...");
       const { desde, hasta } = req.query;
+      console.log("Parámetros:", { desde, hasta });
+
       const datos = await obtenerDatosAnalisis(desde, hasta);
+      console.log("Datos obtenidos correctamente");
 
       // Construir prompt para Gemini
       const prompt = `
@@ -365,7 +386,9 @@ Genera recomendaciones distribuidas en 5 categorías:
 Sé específico, profesional y enfocado en acciones concretas.
 `;
 
+      console.log("Llamando a Gemini API...");
       const recomendaciones = await llamarGemini(prompt);
+      console.log("Respuesta de Gemini recibida");
 
       res.json({
         recomendaciones,
@@ -373,7 +396,10 @@ Sé específico, profesional y enfocado en acciones concretas.
       });
     } catch (error) {
       console.error("Error en aconsejadorInteligente:", error);
-      res.status(500).json({ msg: "Error generando recomendaciones" });
+      res.status(500).json({
+        msg: "Error generando recomendaciones",
+        error: error.message,
+      });
     }
   },
 };
