@@ -92,7 +92,7 @@ async function obtenerDatosAnalisis(desde, hasta) {
       where: { estado: "pendiente", ...where },
     })) || 0;
 
-  // Servicios por categoría
+  // Servicios por categoría - Sin usar raw para que el include funcione correctamente
   const serviciosPorCategoria = await SolicitudServicio.findAll({
     attributes: [
       [
@@ -104,16 +104,18 @@ async function obtenerDatosAnalisis(desde, hasta) {
       {
         model: Categoria,
         attributes: ["id_categoria", "nombre"],
+        required: false,
       },
     ],
-    group: ["Categoria.id_categoria", "Categoria.nombre"],
-    order: [[sequelize.literal("total"), "DESC"]],
+    group: ["Categoria.id_categoria"],
+    order: [
+      [sequelize.literal("COUNT(SolicitudServicio.id_solicitud)"), "DESC"],
+    ],
     limit: 5,
-    raw: true,
     subQuery: false,
   });
 
-  // Top técnicos
+  // Top técnicos - simplificado sin raw
   const topTecnicos = await ServicioAsignado.findAll({
     attributes: [
       "id_tecnico",
@@ -123,24 +125,24 @@ async function obtenerDatosAnalisis(desde, hasta) {
       {
         model: Tecnico,
         attributes: ["calificacion_promedio"],
+        required: true,
         include: [
           {
             model: Usuario,
             attributes: ["nombre", "apellido"],
+            required: true,
           },
         ],
       },
     ],
     group: [
-      "id_tecnico",
+      "ServicioAsignado.id_tecnico",
       "Tecnico.id_tecnico",
-      "Tecnico.calificacion_promedio",
       "Tecnico->Usuario.id_usuario",
-      "Tecnico->Usuario.nombre",
-      "Tecnico->Usuario.apellido",
     ],
-    order: [[sequelize.literal("total_servicios"), "DESC"]],
+    order: [[sequelize.literal("COUNT(ServicioAsignado.id_servicio)"), "DESC"]],
     limit: 3,
+    subQuery: false,
   });
 
   // Usuarios
@@ -201,12 +203,14 @@ async function obtenerDatosAnalisis(desde, hasta) {
     },
     categorias: serviciosPorCategoria.map((c) => ({
       nombre: c.Categoria?.nombre || "Sin categoría",
-      total: parseInt(c.total),
+      total: parseInt(c.dataValues?.total || 0),
     })),
     tecnicos: topTecnicos.map((t) => ({
       nombre: t.Tecnico?.Usuario?.nombre,
       apellido: t.Tecnico?.Usuario?.apellido,
-      servicios: parseInt(t.total_servicios),
+      servicios: parseInt(
+        t.dataValues?.total_servicios || t.total_servicios || 0
+      ),
       calificacion: parseFloat(t.Tecnico?.calificacion_promedio || 0),
     })),
     pagos: {
