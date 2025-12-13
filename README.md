@@ -604,15 +604,6 @@ az webapp create --resource-group smartservice --plan api-plan --name smartservi
 
 ---
 
-## 🤝 Contribuir
-
-1. Fork el proyecto
-2. Crear rama (`git checkout -b feature/NewFeature`)
-3. Commit (`git commit -m 'Add NewFeature'`)
-4. Push (`git push origin feature/NewFeature`)
-5. Pull Request
-
----
 
 ## 📄 Licencia
 
@@ -624,13 +615,7 @@ Licencia **ISC**. Ver [LICENSE](LICENSE).
 
 **Jorge Choque Calle**
 
----
 
-## 📞 Soporte
-
-- 📧 Email: [tu-email@example.com](mailto:tu-email@example.com)
-- 🐛 Issues: [GitHub Issues](https://github.com/tuusuario/smartservice_backend/issues)
-- 📚 Docs: [Postman Collection](POSTMAN_COLLECTION.json)
 
 ---
 
